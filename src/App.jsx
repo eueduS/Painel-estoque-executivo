@@ -11,6 +11,8 @@ import {
   HelpCircle,
   X,
   TrendingUp,
+  LayoutGrid,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   BarChart,
@@ -21,6 +23,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Legend,
+  Cell,
 } from "recharts";
 
 /* =========================================================================
@@ -175,7 +178,6 @@ const PRACA_COLORS = {
 };
 const COLOR_ROSE = "#F43F5E";
 const COLOR_AMBER = "#F59E0B";
-const COLOR_EMERALD = "#10B981";
 
 /* =========================================================================
    THEME
@@ -325,6 +327,44 @@ function LastUpdatedBadge({ lastUpdated, syncing, syncError, onRefresh, t }) {
   );
 }
 
+function PracaHealthRow({ praca, total, faltando, sharedMax, color, t }) {
+  const trackPct = sharedMax > 0 ? (total / sharedMax) * 100 : 0;
+  const filledPct = sharedMax > 0 ? (faltando / sharedMax) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs w-24 sm:w-28 shrink-0 font-semibold tracking-wide" style={{ color }}>
+        {praca}
+      </span>
+      <div className="flex-1 relative h-6">
+        <div className={`absolute inset-y-0 left-0 rounded-md ${t.track}`} style={{ width: `${trackPct}%` }} />
+        <div className="absolute inset-y-0 left-0 rounded-md bg-rose-500/80 transition-all duration-500" style={{ width: `${filledPct}%` }} />
+      </div>
+      <span className={`font-mono text-xs w-16 text-right shrink-0 ${t.textDim}`}>
+        {faltando}/{total}
+      </span>
+    </div>
+  );
+}
+
+function TabBar({ tabs, active, onChange, t }) {
+  return (
+    <div className={`flex flex-wrap gap-2 border-b ${t.border} mb-6 pb-0`}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onChange(tab.id)}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${
+            active === tab.id ? `border-indigo-500 ${t.text}` : `border-transparent ${t.textFaint} ${t.cardHover}`
+          }`}
+        >
+          {tab.icon}
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* =========================================================================
    APP
    ========================================================================= */
@@ -332,11 +372,14 @@ export default function App() {
   const { dark, setDark, t } = useTheme();
 
   const [estoqueRows, setEstoqueRows] = useState(estoqueDataFallback);
+  const [movCols, setMovCols] = useState([]);
+  const [movRows, setMovRows] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [syncErrorDetail, setSyncErrorDetail] = useState("");
 
+  const [activeTab, setActiveTab] = useState("resumo");
   const [quickFilter, setQuickFilter] = useState(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -345,9 +388,11 @@ export default function App() {
   async function refreshData() {
     setSyncing(true);
     try {
-      const [est] = await Promise.all([fetchGvizTab(GID_ESTOQUE), fetchGvizTab(GID_MOV)]);
+      const [est, mov] = await Promise.all([fetchGvizTab(GID_ESTOQUE), fetchGvizTab(GID_MOV)]);
       const parsed = parseEstoqueRows(est.cols, est.rows);
       if (parsed.length > 0) setEstoqueRows(parsed);
+      setMovCols(mov.cols);
+      setMovRows(mov.rows.filter((r) => r.some((v) => v !== "")));
       setSyncError(false);
       setSyncErrorDetail("");
     } catch (e) {
@@ -383,7 +428,30 @@ export default function App() {
       PRACAS.map((p) => {
         const itens = estoqueRows.filter((d) => d.praca === p);
         const faltando = itens.filter((d) => d.falta < 0).length;
-        return { praca: p, "Confortável": itens.length - faltando, "Em Falta": faltando, total: itens.length };
+        return { praca: p, total: itens.length, faltando };
+      }),
+    [estoqueRows]
+  );
+  const maxItensPraca = Math.max(...saudeByPraca.map((x) => x.total), 1);
+
+  const faltantesPorPracaCriticidade = useMemo(
+    () =>
+      PRACAS.map((p) => {
+        const itens = estoqueRows.filter((d) => d.praca === p && d.falta < 0);
+        return {
+          praca: p,
+          "Críticos em Falta": itens.filter((d) => d.critico).length,
+          "Não Críticos em Falta": itens.filter((d) => !d.critico).length,
+        };
+      }),
+    [estoqueRows]
+  );
+
+  const comprasPorPraca = useMemo(
+    () =>
+      PRACAS.map((p) => {
+        const itens = estoqueRows.filter((d) => d.praca === p);
+        return { praca: p, qtd: itens.reduce((s, d) => s + d.comprar, 0), itensComFalta: itens.filter((d) => d.comprar > 0).length };
       }),
     [estoqueRows]
   );
@@ -421,7 +489,15 @@ export default function App() {
 
   function toggleQuickFilter(name) {
     setQuickFilter((prev) => (prev === name ? null : name));
+    setActiveTab("estoque");
   }
+
+  const tabs = [
+    { id: "resumo", label: "Resumo", icon: <LayoutGrid size={16} /> },
+    { id: "compras", label: "Compras", icon: <TrendingUp size={16} /> },
+    { id: "estoque", label: "Estoque Completo", icon: <Package size={16} /> },
+    { id: "movimentacoes", label: "Movimentações", icon: <ArrowLeftRight size={16} /> },
+  ];
 
   return (
     <div className={`min-h-screen ${t.bg} ${t.text} transition-colors duration-300`}>
@@ -455,189 +531,298 @@ export default function App() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-          <BigFractionCard
-            t={t}
-            title="Itens Críticos em Falta"
-            tooltip="Peças críticas (essenciais para operação) que estão com estoque abaixo do mínimo recomendado, do total de peças críticas cadastradas na planilha."
-            falta={kpis.criticosFalta}
-            total={kpis.criticosTotal}
-            color={COLOR_ROSE}
-            colorClass="text-rose-500"
-            active={quickFilter === "criticos"}
-            onClick={() => toggleQuickFilter("criticos")}
-          />
-          <BigFractionCard
-            t={t}
-            title="Itens Não Críticos em Falta"
-            tooltip="Peças de uso comum (não essenciais) que estão abaixo do estoque mínimo, do total de peças não críticas cadastradas."
-            falta={kpis.naoCriticosFalta}
-            total={kpis.naoCriticosTotal}
-            color={COLOR_AMBER}
-            colorClass="text-amber-500"
-            active={quickFilter === "naoCriticos"}
-            onClick={() => toggleQuickFilter("naoCriticos")}
-          />
-        </div>
+        <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} t={t} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Registros ativos nas 5 praças." />
-          <KpiCard t={t} icon={<TrendingUp size={16} />} label="Qtd. Total a Comprar" value={`${kpis.totalComprar} un.`} note="Soma de unidades necessárias em todas as praças." />
-          <KpiCard t={t} icon={<MapPin size={16} />} label="Praças Ativas" value="5 Praças" note={PRACAS.join(", ")} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
-          <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
-            <div className="flex items-center gap-1.5 mb-1">
-              <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Saúde do Estoque por Praça</h2>
-              <Tooltip text="Compara, para cada praça, quantos itens estão em nível confortável (verde) contra quantos estão abaixo do mínimo (vermelho)." />
+        {activeTab === "resumo" && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+              <BigFractionCard
+                t={t}
+                title="Itens Críticos em Falta"
+                tooltip="Peças críticas (essenciais para operação) que estão com estoque abaixo do mínimo recomendado, do total de peças críticas cadastradas na planilha."
+                falta={kpis.criticosFalta}
+                total={kpis.criticosTotal}
+                color={COLOR_ROSE}
+                colorClass="text-rose-500"
+                active={quickFilter === "criticos"}
+                onClick={() => toggleQuickFilter("criticos")}
+              />
+              <BigFractionCard
+                t={t}
+                title="Itens Não Críticos em Falta"
+                tooltip="Peças de uso comum (não essenciais) que estão abaixo do estoque mínimo, do total de peças não críticas cadastradas."
+                falta={kpis.naoCriticosFalta}
+                total={kpis.naoCriticosTotal}
+                color={COLOR_AMBER}
+                colorClass="text-amber-500"
+                active={quickFilter === "naoCriticos"}
+                onClick={() => toggleQuickFilter("naoCriticos")}
+              />
             </div>
-            <p className={`text-xs mb-4 ${t.textFaint}`}>Confortável vs. em falta, por praça</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={saudeByPraca} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} vertical={false} />
-                <XAxis dataKey="praca" tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} interval={0} angle={-15} textAnchor="end" height={50} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
-                <RechartsTooltip
-                  contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Confortável" fill={COLOR_EMERALD} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Em Falta" fill={COLOR_ROSE} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
 
-          <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
-            <div className="flex items-center gap-1.5 mb-1">
-              <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Top Produtos — Compra Consolidada</h2>
-              <Tooltip text="Itens com maior quantidade total a comprar, somando todas as praças. Ajuda a priorizar pedidos de compra em lote." />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+              <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Registros ativos nas 5 praças." />
+              <KpiCard t={t} icon={<MapPin size={16} />} label="Praças Ativas" value="5 Praças" note={PRACAS.join(", ")} />
             </div>
-            <p className={`text-xs mb-4 ${t.textFaint}`}>Unidades a comprar, somando as 5 praças</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={topCompras} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
-                <YAxis type="category" dataKey="item" width={110} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
-                <RechartsTooltip
-                  contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }}
-                />
-                <Bar dataKey="qtd" fill="#6366F1" radius={[0, 4, 4, 0]} name="Unidades a comprar" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
 
-        <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4 flex flex-wrap items-center gap-3`}>
-          <div className="relative flex-1 min-w-[220px]">
-            <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por item ou praça..."
-              className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
-            />
-          </div>
-          {quickFilter && (
-            <button
-              onClick={() => setQuickFilter(null)}
-              className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border font-medium"
-              style={{
-                borderColor: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
-                color: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
-              }}
-            >
-              Filtrado por: {quickFilter === "criticos" ? "Itens Críticos em Falta" : "Itens Não Críticos em Falta"}
-              <X size={12} />
-            </button>
-          )}
-          <span className={`text-xs ${t.textFaint}`}>{filteredRows.length} itens encontrados</span>
-        </div>
-
-        <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className={t.theadBg}>
-                <tr className={`text-left border-b ${t.border}`}>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Praça</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Item</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Crítico</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Mínimo</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Atual</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Falta/Exced.</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Prioridade</th>
-                  <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Comprar</th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${t.border}`}>
-                {pagedRows.map((d, i) => (
-                  <tr key={i} className={`${t.rowHover} transition-colors`}>
-                    <td className="px-4 py-2.5 font-semibold text-xs tracking-wide" style={{ color: PRACA_COLORS[d.praca] }}>
-                      {d.praca}
-                    </td>
-                    <td className="px-4 py-2.5">{d.item}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-xs font-medium ${
-                          d.critico ? "bg-rose-500/15 text-rose-400" : t.dark ? "bg-zinc-700/50 text-slate-400" : "bg-slate-200 text-slate-500"
-                        }`}
-                      >
-                        {d.critico ? "Sim" : "Não"}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.min}</td>
-                    <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.atual === null ? "—" : d.atual}</td>
-                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.falta < 0 ? "text-rose-500" : "text-emerald-500"}`}>
-                      {d.falta > 0 ? `+${d.falta}` : d.falta}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-xs font-mono font-semibold ${
-                          d.prioridade >= 7 ? "bg-rose-500/15 text-rose-400" : d.prioridade >= 4 ? "bg-amber-500/15 text-amber-400" : "bg-zinc-500/15 text-slate-400"
-                        }`}
-                      >
-                        {d.prioridade}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.comprar > 0 ? "text-indigo-400" : t.textFaint}`}>{d.comprar}</td>
-                  </tr>
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Saúde do Estoque por Praça</h2>
+                <Tooltip text="Barra cinza = total de itens cadastrados na praça. Preenchimento vermelho = quantos desses itens estão em falta. Dá pra comparar proporção E tamanho entre praças ao mesmo tempo." />
+              </div>
+              <p className={`text-xs mb-4 ${t.textFaint}`}>Cinza = total cadastrado · Vermelho = em falta</p>
+              <div className="space-y-3">
+                {saudeByPraca.map((row) => (
+                  <PracaHealthRow key={row.praca} praca={row.praca} total={row.total} faltando={row.faltando} sharedMax={maxItensPraca} color={PRACA_COLORS[row.praca]} t={t} />
                 ))}
-                {pagedRows.length === 0 && (
-                  <tr>
-                    <td colSpan="8" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
-                      Nenhum item corresponde à busca ou filtro selecionado.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className={`flex items-center justify-between px-4 py-3 border-t ${t.border} text-xs ${t.textDim}`}>
-            <span>
-              {filteredRows.length === 0 ? 0 : currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, filteredRows.length)} de {filteredRows.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
-                className={`p-1.5 rounded-lg border ${t.border} disabled:opacity-30 ${t.cardHover}`}
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <span className="font-mono">
-                {currentPage + 1} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={currentPage >= totalPages - 1}
-                className={`p-1.5 rounded-lg border ${t.border} disabled:opacity-30 ${t.cardHover}`}
-              >
-                <ChevronRight size={14} />
-              </button>
+              </div>
             </div>
+
+            <p className={`text-xs text-center mt-4 ${t.textFaint}`}>
+              Veja o detalhamento de unidades na aba <strong className={t.textDim}>Compras</strong>, a lista completa em <strong className={t.textDim}>Estoque Completo</strong>, ou o histórico em <strong className={t.textDim}>Movimentações</strong>.
+            </p>
+          </>
+        )}
+
+        {activeTab === "compras" && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="sm:col-span-1">
+                <KpiCard t={t} icon={<TrendingUp size={16} />} label="Qtd. Total a Comprar" value={`${kpis.totalComprar} un.`} note="Soma de unidades necessárias nas 5 praças." />
+              </div>
+              <div className={`sm:col-span-2 rounded-2xl border ${t.border} ${t.bgAlt} p-4 text-xs ${t.textDim} leading-relaxed flex items-center`}>
+                Esta aba mostra <strong className={t.text}>unidades a comprar</strong>, não contagem de itens — os totais aqui não coincidem com os cards "Falta" do Resumo, que contam registros.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+              <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Compra Consolidada por Praça</h2>
+                  <Tooltip text="Total de unidades a comprar em cada praça, somando todos os itens." />
+                </div>
+                <p className={`text-xs mb-4 ${t.textFaint}`}>Unidades a comprar por praça</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={comprasPorPraca} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} vertical={false} />
+                    <XAxis dataKey="praca" tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
+                    <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
+                    <Bar dataKey="qtd" name="Unidades a comprar" radius={[4, 4, 0, 0]}>
+                      {comprasPorPraca.map((row) => (
+                        <Cell key={row.praca} fill={PRACA_COLORS[row.praca]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Top Produtos — Compra Consolidada</h2>
+                  <Tooltip text="Itens com maior quantidade total a comprar, somando todas as praças. Ajuda a priorizar pedidos de compra em lote." />
+                </div>
+                <p className={`text-xs mb-4 ${t.textFaint}`}>Unidades a comprar, somando as 5 praças</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={topCompras} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
+                    <YAxis type="category" dataKey="item" width={110} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
+                    <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
+                    <Bar dataKey="qtd" fill="#6366F1" radius={[0, 4, 4, 0]} name="Unidades a comprar" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
+              <h2 className="font-display text-sm font-semibold uppercase tracking-wide mb-4">Resumo por Praça</h2>
+              <div className={`divide-y ${t.border}`}>
+                {comprasPorPraca.map((row) => (
+                  <div key={row.praca} className="flex items-center justify-between py-2 text-sm">
+                    <span className="font-semibold" style={{ color: PRACA_COLORS[row.praca] }}>
+                      {row.praca}
+                    </span>
+                    <span className={t.textDim}>
+                      {row.itensComFalta} itens · <span className="font-mono font-semibold text-indigo-400">{row.qtd} un.</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === "estoque" && (
+          <>
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5 mb-6`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Itens Faltantes por Praça e Criticidade</h2>
+                <Tooltip text="De todos os itens em falta em cada praça, quantos são críticos (vermelho) e quantos não são (âmbar)." />
+              </div>
+              <p className={`text-xs mb-4 ${t.textFaint}`}>Composição dos itens em falta, por praça</p>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={faltantesPorPracaCriticidade} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} vertical={false} />
+                  <XAxis dataKey="praca" tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} interval={0} angle={-15} textAnchor="end" height={50} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
+                  <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="Críticos em Falta" stackId="a" fill={COLOR_ROSE} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Não Críticos em Falta" stackId="a" fill={COLOR_AMBER} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4 flex flex-wrap items-center gap-3`}>
+              <div className="relative flex-1 min-w-[220px]">
+                <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar por item ou praça..."
+                  className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
+                />
+              </div>
+              {quickFilter && (
+                <button
+                  onClick={() => setQuickFilter(null)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border font-medium"
+                  style={{
+                    borderColor: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
+                    color: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
+                  }}
+                >
+                  Filtrado por: {quickFilter === "criticos" ? "Itens Críticos em Falta" : "Itens Não Críticos em Falta"}
+                  <X size={12} />
+                </button>
+              )}
+              <span className={`text-xs ${t.textFaint}`}>{filteredRows.length} itens encontrados</span>
+            </div>
+
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={t.theadBg}>
+                    <tr className={`text-left border-b ${t.border}`}>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Praça</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Item</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Crítico</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Mínimo</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Atual</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Falta/Exced.</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Prioridade</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Comprar</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${t.border}`}>
+                    {pagedRows.map((d, i) => (
+                      <tr key={i} className={`${t.rowHover} transition-colors`}>
+                        <td className="px-4 py-2.5 font-semibold text-xs tracking-wide" style={{ color: PRACA_COLORS[d.praca] }}>
+                          {d.praca}
+                        </td>
+                        <td className="px-4 py-2.5">{d.item}</td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-xs font-medium ${
+                              d.critico ? "bg-rose-500/15 text-rose-400" : t.dark ? "bg-zinc-700/50 text-slate-400" : "bg-slate-200 text-slate-500"
+                            }`}
+                          >
+                            {d.critico ? "Sim" : "Não"}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.min}</td>
+                        <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.atual === null ? "—" : d.atual}</td>
+                        <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.falta < 0 ? "text-rose-500" : "text-emerald-500"}`}>
+                          {d.falta > 0 ? `+${d.falta}` : d.falta}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-xs font-mono font-semibold ${
+                              d.prioridade >= 7 ? "bg-rose-500/15 text-rose-400" : d.prioridade >= 4 ? "bg-amber-500/15 text-amber-400" : "bg-zinc-500/15 text-slate-400"
+                            }`}
+                          >
+                            {d.prioridade}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.comprar > 0 ? "text-indigo-400" : t.textFaint}`}>{d.comprar}</td>
+                      </tr>
+                    ))}
+                    {pagedRows.length === 0 && (
+                      <tr>
+                        <td colSpan="8" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
+                          Nenhum item corresponde à busca ou filtro selecionado.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className={`flex items-center justify-between px-4 py-3 border-t ${t.border} text-xs ${t.textDim}`}>
+                <span>
+                  {filteredRows.length === 0 ? 0 : currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, filteredRows.length)} de {filteredRows.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={currentPage === 0}
+                    className={`p-1.5 rounded-lg border ${t.border} disabled:opacity-30 ${t.cardHover}`}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="font-mono">
+                    {currentPage + 1} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={currentPage >= totalPages - 1}
+                    className={`p-1.5 rounded-lg border ${t.border} disabled:opacity-30 ${t.cardHover}`}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === "movimentacoes" && (
+          <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
+            <div className={`p-5 border-b ${t.border}`}>
+              <h2 className="font-display text-sm font-semibold uppercase tracking-wide mb-1">Movimentações de Estoque</h2>
+              <p className={`text-xs ${t.textFaint}`}>Direto da aba "Movimentações" da planilha — atualiza a cada sincronização.</p>
+            </div>
+            {movRows.length === 0 ? (
+              <div className={`p-10 text-center text-sm ${t.textFaint}`}>{syncing ? "Carregando movimentações…" : "Nenhuma movimentação encontrada nesta aba da planilha."}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={t.theadBg}>
+                    <tr className={`text-left border-b ${t.border}`}>
+                      {movCols.map((c, i) => (
+                        <th key={i} className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${t.textDim}`}>
+                          {c || `Col. ${i + 1}`}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${t.border}`}>
+                    {movRows.map((row, i) => (
+                      <tr key={i} className={`${t.rowHover} transition-colors`}>
+                        {row.map((cell, j) => (
+                          <td key={j} className="px-4 py-2.5 whitespace-nowrap">
+                            {cell === "" ? "—" : String(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         <p className={`text-xs text-center mt-8 ${t.textFaint}`}>Painel Executivo de Estoque · MUDE · Sincronizado automaticamente a cada 60s</p>
       </div>
