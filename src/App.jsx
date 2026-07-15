@@ -15,6 +15,7 @@ import {
   TrendingUp,
   LayoutGrid,
   ArrowLeftRight,
+  AlertTriangle,
 } from "lucide-react";
 import {
   BarChart,
@@ -387,6 +388,9 @@ export default function App() {
   const [expandedPraca, setExpandedPraca] = useState(null);
   const [quickFilter, setQuickFilter] = useState(null);
   const [pracaFilter, setPracaFilter] = useState(null);
+  const [pracaFilterFalt, setPracaFilterFalt] = useState(null);
+  const [searchFalt, setSearchFalt] = useState("");
+  const [pageFalt, setPageFalt] = useState(0);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const pageSize = 8;
@@ -508,6 +512,32 @@ export default function App() {
     return map;
   }, [estoqueRows]);
 
+  const faltantesPorPraca = useMemo(() => {
+    const map = {};
+    PRACAS.forEach((p) => {
+      map[p] = estoqueRows.filter((d) => d.praca === p && d.falta < 0).length;
+    });
+    return map;
+  }, [estoqueRows]);
+
+  const faltantesRows = useMemo(() => {
+    let rows = estoqueRows.filter((d) => d.falta < 0);
+    if (pracaFilterFalt) rows = rows.filter((d) => d.praca === pracaFilterFalt);
+    if (searchFalt.trim()) {
+      const q = searchFalt.trim().toLowerCase();
+      rows = rows.filter((d) => d.item.toLowerCase().includes(q) || d.praca.toLowerCase().includes(q));
+    }
+    return rows.sort((a, b) => a.falta - b.falta);
+  }, [estoqueRows, pracaFilterFalt, searchFalt]);
+
+  useEffect(() => {
+    setPageFalt(0);
+  }, [pracaFilterFalt, searchFalt]);
+
+  const totalPagesFalt = Math.max(1, Math.ceil(faltantesRows.length / pageSize));
+  const currentPageFalt = Math.min(pageFalt, totalPagesFalt - 1);
+  const pagedRowsFalt = faltantesRows.slice(currentPageFalt * pageSize, currentPageFalt * pageSize + pageSize);
+
   useEffect(() => {
     setPage(0);
   }, [quickFilter, pracaFilter, search]);
@@ -523,6 +553,7 @@ export default function App() {
 
   const tabs = [
     { id: "resumo", label: "Resumo", icon: <LayoutGrid size={16} /> },
+    { id: "faltantes", label: "Itens Faltantes", icon: <AlertTriangle size={16} /> },
     { id: "compras", label: "Compras", icon: <TrendingUp size={16} /> },
     { id: "estoque", label: "Estoque Completo", icon: <Package size={16} /> },
     { id: "movimentacoes", label: "Movimentações", icon: <ArrowLeftRight size={16} /> },
@@ -716,7 +747,7 @@ export default function App() {
           </>
         )}
 
-        {activeTab === "estoque" && (
+        {activeTab === "faltantes" && (
           <>
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5 mb-6`}>
               <div className="flex items-center gap-1.5 mb-1">
@@ -737,6 +768,119 @@ export default function App() {
               </ResponsiveContainer>
             </div>
 
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça (só itens em falta)</p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  onClick={() => setPracaFilterFalt(null)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                    !pracaFilterFalt ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
+                  }`}
+                >
+                  Todas ({estoqueRows.filter((d) => d.falta < 0).length})
+                </button>
+                {PRACAS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPracaFilterFalt((prev) => (prev === p ? null : p))}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+                    style={
+                      pracaFilterFalt === p
+                        ? { color: PRACA_COLORS[p], borderColor: PRACA_COLORS[p], backgroundColor: `${PRACA_COLORS[p]}1A` }
+                        : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
+                    }
+                  >
+                    {p} ({faltantesPorPraca[p] || 0})
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
+                <input
+                  value={searchFalt}
+                  onChange={(e) => setSearchFalt(e.target.value)}
+                  placeholder="Buscar por item ou praça..."
+                  className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
+                />
+              </div>
+            </div>
+
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={t.theadBg}>
+                    <tr className={`text-left border-b ${t.border}`}>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Praça</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Item</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Crítico</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Mínimo</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Atual</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Falta</th>
+                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Comprar</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${t.border}`}>
+                    {pagedRowsFalt.map((d, i) => (
+                      <tr key={i} className={`${t.rowHover} transition-colors`}>
+                        <td className="px-4 py-2.5 font-semibold text-xs tracking-wide" style={{ color: PRACA_COLORS[d.praca] }}>
+                          {d.praca}
+                        </td>
+                        <td className="px-4 py-2.5">{d.item}</td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-xs font-medium ${
+                              d.critico ? "bg-rose-500/15 text-rose-400" : t.dark ? "bg-zinc-700/50 text-slate-400" : "bg-slate-200 text-slate-500"
+                            }`}
+                          >
+                            {d.critico ? "Sim" : "Não"}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.min}</td>
+                        <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.atual === null ? "—" : d.atual}</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-500">{d.falta}</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-semibold text-indigo-400">{d.comprar}</td>
+                      </tr>
+                    ))}
+                    {pagedRowsFalt.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
+                          Nenhum item em falta com esses filtros. 🎉
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className={`flex items-center justify-between px-4 py-3 border-t ${t.border} text-xs ${t.textDim}`}>
+                <span>
+                  {faltantesRows.length === 0 ? 0 : currentPageFalt * pageSize + 1}–{Math.min((currentPageFalt + 1) * pageSize, faltantesRows.length)} de {faltantesRows.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPageFalt((p) => Math.max(0, p - 1))}
+                    disabled={currentPageFalt === 0}
+                    className={`p-1.5 rounded-lg border ${t.border} disabled:opacity-30 ${t.cardHover}`}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="font-mono">
+                    {currentPageFalt + 1} / {totalPagesFalt}
+                  </span>
+                  <button
+                    onClick={() => setPageFalt((p) => Math.min(totalPagesFalt - 1, p + 1))}
+                    disabled={currentPageFalt >= totalPagesFalt - 1}
+                    className={`p-1.5 rounded-lg border ${t.border} disabled:opacity-30 ${t.cardHover}`}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === "estoque" && (
+          <>
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4`}>
               <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça</p>
               <div className="flex flex-wrap gap-2 mb-4">
