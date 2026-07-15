@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import * as XLSX from "xlsx";
 import mudeLogo from "./assets/mude-logo.jpeg";
 import {
   Package,
@@ -16,6 +17,9 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   X,
+  FileDown,
+  Presentation,
+  Minimize2,
 } from "lucide-react";
 import {
   BarChart,
@@ -472,6 +476,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState("resumo");
   const [showHelp, setShowHelp] = useState(false);
+  const [presentMode, setPresentMode] = useState(false);
   const [expandedPraca, setExpandedPraca] = useState(null);
   const [somenteEmFalta, setSomenteEmFalta] = useState(false);
   const [pracaFilter, setPracaFilter] = useState(null);
@@ -658,6 +663,74 @@ export default function App() {
     setActiveTab("estoque");
   }
 
+  function exportToExcel() {
+    const wb = XLSX.utils.book_new();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("pt-BR");
+
+    const resumoData = [
+      ["Painel Executivo de Estoque — MUDE"],
+      [`Exportado em ${dateStr}`],
+      [],
+      ["Métrica", "Valor"],
+      ["Total de Itens Cadastrados", kpis.totalCadastrado],
+      ["Itens Críticos em Falta", `${kpis.criticosFalta} / ${kpis.criticosTotal}`],
+      ["Itens Não Críticos em Falta", `${kpis.naoCriticosFalta} / ${kpis.naoCriticosTotal}`],
+      ["Total de Unidades a Comprar", kpis.totalComprar],
+      [],
+      ["Praça", "Itens em Falta", "Unidades a Comprar"],
+      ...PRACAS.map((p) => [p, faltantesPorPraca[p] || 0, comprasPorPraca.find((c) => c.praca === p)?.qtd || 0]),
+    ];
+    const wsResumo = XLSX.utils.aoa_to_sheet(resumoData);
+    wsResumo["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+    const estoqueHeader = ["Praça", "Item", "Crítico", "Mínimo", "Atual", "Falta/Excedente", "Comprar"];
+    const estoqueData = [estoqueHeader, ...estoqueRows.map((d) => [d.praca, d.item, d.critico ? "Sim" : "Não", d.min, d.atual, d.falta, d.comprar])];
+    const wsEstoque = XLSX.utils.aoa_to_sheet(estoqueData);
+    wsEstoque["!cols"] = [{ wch: 15 }, { wch: 24 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, wsEstoque, "Estoque Completo");
+
+    PRACAS.forEach((p) => {
+      const itens = estoqueRows.filter((d) => d.praca === p && d.comprar > 0).sort((a, b) => b.comprar - a.comprar);
+      const total = itens.reduce((s, d) => s + d.comprar, 0);
+      const rows = [
+        ["Solicitação de Compra — MUDE"],
+        [`Praça: ${p}`],
+        [`Data: ${dateStr}`],
+        [],
+        ["Item", "Crítico", "Quantidade a Comprar"],
+        ...(itens.length > 0 ? itens.map((d) => [d.item, d.critico ? "Sim" : "Não", d.comprar]) : [["Nenhum item precisa de compra nesta praça", "", ""]]),
+        [],
+        ["Total", "", total],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 22 }];
+      const sheetName = `Compra - ${p}`.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    XLSX.writeFile(wb, `painel-estoque-mude-${now.toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  function togglePresentMode() {
+    if (!presentMode) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+      setPresentMode(true);
+    } else {
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      setPresentMode(false);
+    }
+  }
+
+  useEffect(() => {
+    function handleFsChange() {
+      if (!document.fullscreenElement) setPresentMode(false);
+    }
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
+
   const tabs = [
     { id: "resumo", label: "Resumo", icon: <LayoutGrid size={16} /> },
     { id: "faltantes", label: "Itens Faltantes", icon: <AlertTriangle size={16} /> },
@@ -679,19 +752,39 @@ export default function App() {
             <p className={`text-sm mt-1 ${t.textDim}`}>Dados ao vivo, direto da planilha de controle das 5 praças</p>
           </div>
           <div className="flex items-center gap-2">
-            <LastUpdatedBadge lastUpdated={lastUpdated} syncing={syncing} syncError={syncError} onRefresh={refreshData} t={t} />
+            {!presentMode && (
+              <>
+                <LastUpdatedBadge lastUpdated={lastUpdated} syncing={syncing} syncError={syncError} onRefresh={refreshData} t={t} />
+                <button
+                  onClick={exportToExcel}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
+                  title="Exportar para Excel"
+                >
+                  <FileDown size={16} />
+                  <span className="hidden sm:inline">Excel</span>
+                </button>
+                <button
+                  onClick={() => setShowHelp(true)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
+                  title="Como usar este painel"
+                >
+                  <HelpCircle size={16} />
+                </button>
+                <button
+                  onClick={() => setDark(!dark)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
+                >
+                  {dark ? <Sun size={16} /> : <Moon size={16} />}
+                </button>
+              </>
+            )}
             <button
-              onClick={() => setShowHelp(true)}
+              onClick={togglePresentMode}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
-              title="Como usar este painel"
+              title={presentMode ? "Sair do modo apresentação" : "Modo apresentação"}
             >
-              <HelpCircle size={16} />
-            </button>
-            <button
-              onClick={() => setDark(!dark)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
-            >
-              {dark ? <Sun size={16} /> : <Moon size={16} />}
+              {presentMode ? <Minimize2 size={16} /> : <Presentation size={16} />}
+              {presentMode && <span className="hidden sm:inline">Sair</span>}
             </button>
           </div>
         </div>
@@ -885,33 +978,37 @@ export default function App() {
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4`}>
-              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça (só itens em falta)</p>
-              <div className="flex flex-wrap gap-2 mb-4">
-                <button
-                  onClick={() => setPracaFilterFalt(null)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                    !pracaFilterFalt ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
-                  }`}
-                >
-                  Todas ({estoqueRows.filter((d) => d.falta < 0).length})
-                </button>
-                {PRACAS.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPracaFilterFalt((prev) => (prev === p ? null : p))}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
-                    style={
-                      pracaFilterFalt === p
-                        ? { color: PRACA_COLORS[p], borderColor: PRACA_COLORS[p], backgroundColor: `${PRACA_COLORS[p]}1A` }
-                        : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
-                    }
-                  >
-                    {p} ({faltantesPorPraca[p] || 0})
-                  </button>
-                ))}
-              </div>
-              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por importância</p>
-              <CriticoChipRow value={criticoFilterFalt} onChange={setCriticoFilterFalt} counts={criticosFaltantesCount} t={t} />
+              {!presentMode && (
+                <>
+                  <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça (só itens em falta)</p>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <button
+                      onClick={() => setPracaFilterFalt(null)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                        !pracaFilterFalt ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
+                      }`}
+                    >
+                      Todas ({estoqueRows.filter((d) => d.falta < 0).length})
+                    </button>
+                    {PRACAS.map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setPracaFilterFalt((prev) => (prev === p ? null : p))}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+                        style={
+                          pracaFilterFalt === p
+                            ? { color: PRACA_COLORS[p], borderColor: PRACA_COLORS[p], backgroundColor: `${PRACA_COLORS[p]}1A` }
+                            : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
+                        }
+                      >
+                        {p} ({faltantesPorPraca[p] || 0})
+                      </button>
+                    ))}
+                  </div>
+                  <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por importância</p>
+                  <CriticoChipRow value={criticoFilterFalt} onChange={setCriticoFilterFalt} counts={criticosFaltantesCount} t={t} />
+                </>
+              )}
 
               <div className="max-w-xs mb-4">
                 <KpiCard
@@ -923,19 +1020,23 @@ export default function App() {
                 />
               </div>
 
-              <div className="relative">
-                <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
-                <input
-                  value={searchFalt}
-                  onChange={(e) => setSearchFalt(e.target.value)}
-                  placeholder="Buscar por item ou praça..."
-                  className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
-                />
-              </div>
-              <span className={`block text-xs mt-3 ${t.textFaint}`}>
-                {faltantesRows.length} itens encontrados
-                {faltantesRows.length > 0 && <> ({faltantesRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
-              </span>
+              {!presentMode && (
+                <>
+                  <div className="relative">
+                    <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
+                    <input
+                      value={searchFalt}
+                      onChange={(e) => setSearchFalt(e.target.value)}
+                      placeholder="Buscar por item ou praça..."
+                      className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
+                    />
+                  </div>
+                  <span className={`block text-xs mt-3 ${t.textFaint}`}>
+                    {faltantesRows.length} itens encontrados
+                    {faltantesRows.length > 0 && <> ({faltantesRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
+                  </span>
+                </>
+              )}
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
@@ -1015,55 +1116,59 @@ export default function App() {
         {activeTab === "estoque" && (
           <>
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4`}>
-              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça</p>
-              <div className="flex flex-wrap gap-2 mb-4">
-                <button
-                  onClick={() => setPracaFilter(null)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                    !pracaFilter ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
-                  }`}
-                >
-                  Todas ({estoqueRows.length})
-                </button>
-                {PRACAS.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPracaFilter((prev) => (prev === p ? null : p))}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
-                    style={
-                      pracaFilter === p
-                        ? { color: PRACA_COLORS[p], borderColor: PRACA_COLORS[p], backgroundColor: `${PRACA_COLORS[p]}1A` }
-                        : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
-                    }
-                  >
-                    {p} ({itensPorPraca[p] || 0})
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-                <p className={`text-xs font-semibold uppercase tracking-wide ${t.textDim}`}>Filtrar por importância</p>
-                <button
-                  onClick={() => setSomenteEmFalta((prev) => !prev)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
-                  style={
-                    somenteEmFalta
-                      ? { color: COLOR_ROSE, borderColor: COLOR_ROSE, backgroundColor: `${COLOR_ROSE}1A` }
-                      : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
-                  }
-                >
-                  Só itens em falta
-                </button>
-              </div>
-              <CriticoChipRow
-                value={criticoFilter}
-                onChange={setCriticoFilter}
-                counts={criticosCount}
-                t={t}
-                onTodos={() => {
-                  setCriticoFilter(null);
-                  setSomenteEmFalta(false);
-                }}
-              />
+              {!presentMode && (
+                <>
+                  <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça</p>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <button
+                      onClick={() => setPracaFilter(null)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                        !pracaFilter ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
+                      }`}
+                    >
+                      Todas ({estoqueRows.length})
+                    </button>
+                    {PRACAS.map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setPracaFilter((prev) => (prev === p ? null : p))}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+                        style={
+                          pracaFilter === p
+                            ? { color: PRACA_COLORS[p], borderColor: PRACA_COLORS[p], backgroundColor: `${PRACA_COLORS[p]}1A` }
+                            : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
+                        }
+                      >
+                        {p} ({itensPorPraca[p] || 0})
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${t.textDim}`}>Filtrar por importância</p>
+                    <button
+                      onClick={() => setSomenteEmFalta((prev) => !prev)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+                      style={
+                        somenteEmFalta
+                          ? { color: COLOR_ROSE, borderColor: COLOR_ROSE, backgroundColor: `${COLOR_ROSE}1A` }
+                          : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
+                      }
+                    >
+                      Só itens em falta
+                    </button>
+                  </div>
+                  <CriticoChipRow
+                    value={criticoFilter}
+                    onChange={setCriticoFilter}
+                    counts={criticosCount}
+                    t={t}
+                    onTodos={() => {
+                      setCriticoFilter(null);
+                      setSomenteEmFalta(false);
+                    }}
+                  />
+                </>
+              )}
 
               <div className="max-w-xs mb-4">
                 <KpiCard
@@ -1075,21 +1180,23 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar por item ou praça..."
-                    className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
-                  />
+              {!presentMode && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative flex-1 min-w-[220px]">
+                    <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Buscar por item ou praça..."
+                      className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
+                    />
+                  </div>
+                  <span className={`text-xs ${t.textFaint}`}>
+                    {filteredRows.length} itens encontrados
+                    {filteredRows.length > 0 && <> ({filteredRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
+                  </span>
                 </div>
-                <span className={`text-xs ${t.textFaint}`}>
-                  {filteredRows.length} itens encontrados
-                  {filteredRows.length > 0 && <> ({filteredRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
-                </span>
-              </div>
+              )}
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
