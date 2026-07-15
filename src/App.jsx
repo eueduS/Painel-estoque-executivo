@@ -386,6 +386,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("resumo");
   const [expandedPraca, setExpandedPraca] = useState(null);
   const [quickFilter, setQuickFilter] = useState(null);
+  const [pracaFilter, setPracaFilter] = useState(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const pageSize = 8;
@@ -466,7 +467,7 @@ export default function App() {
     PRACAS.forEach((p) => {
       map[p] = estoqueRows
         .filter((d) => d.praca === p && d.comprar > 0)
-        .sort((a, b) => b.prioridade - a.prioridade || b.comprar - a.comprar);
+        .sort((a, b) => b.comprar - a.comprar);
     });
     return map;
   }, [estoqueRows]);
@@ -491,16 +492,25 @@ export default function App() {
     let rows = estoqueRows;
     if (quickFilter === "criticos") rows = rows.filter((d) => d.critico && d.falta < 0);
     if (quickFilter === "naoCriticos") rows = rows.filter((d) => !d.critico && d.falta < 0);
+    if (pracaFilter) rows = rows.filter((d) => d.praca === pracaFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter((d) => d.item.toLowerCase().includes(q) || d.praca.toLowerCase().includes(q));
     }
     return rows;
-  }, [estoqueRows, quickFilter, search]);
+  }, [estoqueRows, quickFilter, pracaFilter, search]);
+
+  const itensPorPraca = useMemo(() => {
+    const map = {};
+    PRACAS.forEach((p) => {
+      map[p] = estoqueRows.filter((d) => d.praca === p).length;
+    });
+    return map;
+  }, [estoqueRows]);
 
   useEffect(() => {
     setPage(0);
-  }, [quickFilter, search]);
+  }, [quickFilter, pracaFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const currentPage = Math.min(page, totalPages - 1);
@@ -690,7 +700,7 @@ export default function App() {
                                   {d.critico && <span className="shrink-0 px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 text-[10px] font-semibold">Crítico</span>}
                                 </span>
                                 <span className="flex items-center gap-3 shrink-0 ml-2">
-                                  <span className={t.textFaint}>prioridade {d.prioridade}</span>
+                                  <span className={`${t.textFaint}`}>faltam {Math.abs(d.falta)}</span>
                                   <span className="font-mono font-semibold text-indigo-400">{d.comprar} un.</span>
                                 </span>
                               </div>
@@ -727,30 +737,57 @@ export default function App() {
               </ResponsiveContainer>
             </div>
 
-            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4 flex flex-wrap items-center gap-3`}>
-              <div className="relative flex-1 min-w-[220px]">
-                <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por item ou praça..."
-                  className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
-                />
-              </div>
-              {quickFilter && (
+            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-4 mb-4`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por praça</p>
+              <div className="flex flex-wrap gap-2 mb-4">
                 <button
-                  onClick={() => setQuickFilter(null)}
-                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border font-medium"
-                  style={{
-                    borderColor: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
-                    color: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
-                  }}
+                  onClick={() => setPracaFilter(null)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                    !pracaFilter ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
+                  }`}
                 >
-                  Filtrado por: {quickFilter === "criticos" ? "Itens Críticos em Falta" : "Itens Não Críticos em Falta"}
-                  <X size={12} />
+                  Todas ({estoqueRows.length})
                 </button>
-              )}
-              <span className={`text-xs ${t.textFaint}`}>{filteredRows.length} itens encontrados</span>
+                {PRACAS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPracaFilter((prev) => (prev === p ? null : p))}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+                    style={
+                      pracaFilter === p
+                        ? { color: PRACA_COLORS[p], borderColor: PRACA_COLORS[p], backgroundColor: `${PRACA_COLORS[p]}1A` }
+                        : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
+                    }
+                  >
+                    {p} ({itensPorPraca[p] || 0})
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar por item ou praça..."
+                    className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
+                  />
+                </div>
+                {quickFilter && (
+                  <button
+                    onClick={() => setQuickFilter(null)}
+                    className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border font-medium"
+                    style={{
+                      borderColor: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
+                      color: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
+                    }}
+                  >
+                    Filtrado por: {quickFilter === "criticos" ? "Itens Críticos em Falta" : "Itens Não Críticos em Falta"}
+                    <X size={12} />
+                  </button>
+                )}
+                <span className={`text-xs ${t.textFaint}`}>{filteredRows.length} itens encontrados</span>
+              </div>
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
@@ -764,7 +801,6 @@ export default function App() {
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Mínimo</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Atual</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Falta/Exced.</th>
-                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Prioridade</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Comprar</th>
                     </tr>
                   </thead>
@@ -789,21 +825,12 @@ export default function App() {
                         <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.falta < 0 ? "text-rose-500" : "text-emerald-500"}`}>
                           {d.falta > 0 ? `+${d.falta}` : d.falta}
                         </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-xs font-mono font-semibold ${
-                              d.prioridade >= 7 ? "bg-rose-500/15 text-rose-400" : d.prioridade >= 4 ? "bg-amber-500/15 text-amber-400" : "bg-zinc-500/15 text-slate-400"
-                            }`}
-                          >
-                            {d.prioridade}
-                          </span>
-                        </td>
                         <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.comprar > 0 ? "text-indigo-400" : t.textFaint}`}>{d.comprar}</td>
                       </tr>
                     ))}
                     {pagedRows.length === 0 && (
                       <tr>
-                        <td colSpan="8" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
+                        <td colSpan="7" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
                           Nenhum item corresponde à busca ou filtro selecionado.
                         </td>
                       </tr>
