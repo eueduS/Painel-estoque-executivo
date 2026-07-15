@@ -188,6 +188,7 @@ function useTheme() {
   const [dark, setDark] = useState(true);
   const t = dark
     ? {
+        dark: true,
         bg: "bg-slate-950",
         bgAlt: "bg-zinc-900/60",
         border: "border-zinc-800",
@@ -202,6 +203,7 @@ function useTheme() {
         track: "bg-zinc-800",
       }
     : {
+        dark: false,
         bg: "bg-slate-50",
         bgAlt: "bg-white",
         border: "border-slate-200",
