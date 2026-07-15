@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import mudeLogo from "./assets/mude-logo.jpeg";
 import {
   Package,
@@ -665,54 +665,156 @@ export default function App() {
     setActiveTab("estoque");
   }
 
-  function exportToExcel() {
-    const wb = XLSX.utils.book_new();
+  async function exportToExcel() {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "MUDE";
+    wb.created = new Date();
     const now = new Date();
     const dateStr = now.toLocaleDateString("pt-BR");
 
-    const resumoData = [
-      ["Painel Executivo de Estoque — MUDE"],
-      [`Exportado em ${dateStr}`],
-      [],
-      ["Métrica", "Valor"],
+    const THIN = { style: "thin", color: { argb: "FFD1D5DB" } };
+    const BORDER_ALL = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+    const DARK_HEADER = "FF1E293B";
+    const ZEBRA = "FFF1F5F9";
+    const ROSE = "FFF43F5E";
+    const AMBER = "FFF59E0B";
+
+    function titleBlock(ws, lastCol, title, subtitleLines, fillColor = DARK_HEADER) {
+      ws.mergeCells(1, 1, 1, lastCol);
+      const titleCell = ws.getCell(1, 1);
+      titleCell.value = title;
+      titleCell.font = { bold: true, size: 15, color: { argb: "FFFFFFFF" } };
+      titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillColor } };
+      titleCell.alignment = { vertical: "middle", indent: 1 };
+      ws.getRow(1).height = 26;
+      subtitleLines.forEach((line, i) => {
+        ws.mergeCells(2 + i, 1, 2 + i, lastCol);
+        const c = ws.getCell(2 + i, 1);
+        c.value = line;
+        c.font = { italic: true, size: 10, color: { argb: "FF64748B" } };
+      });
+      return 2 + subtitleLines.length + 1;
+    }
+
+    function headerRow(ws, rowIdx, headers, fillColor = DARK_HEADER) {
+      const row = ws.getRow(rowIdx);
+      headers.forEach((h, i) => {
+        const cell = row.getCell(i + 1);
+        cell.value = h;
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillColor } };
+        cell.border = BORDER_ALL;
+        cell.alignment = { vertical: "middle" };
+      });
+      row.height = 20;
+      return row;
+    }
+
+    function dataRow(ws, rowIdx, values, { zebra = false, rightAlignFrom = null } = {}) {
+      const row = ws.getRow(rowIdx);
+      values.forEach((v, i) => {
+        const cell = row.getCell(i + 1);
+        cell.value = v;
+        cell.border = BORDER_ALL;
+        if (zebra) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
+        if (rightAlignFrom !== null && i >= rightAlignFrom) cell.alignment = { horizontal: "right" };
+      });
+      return row;
+    }
+
+    // ---------------- Resumo ----------------
+    const wsResumo = wb.addWorksheet("Resumo");
+    wsResumo.columns = [{ width: 30 }, { width: 18 }, { width: 20 }];
+    let r = titleBlock(wsResumo, 3, "Painel Executivo de Estoque — MUDE", [`Exportado em ${dateStr}`]);
+
+    headerRow(wsResumo, r, ["Métrica", "Valor", ""]);
+    r++;
+    const metrics = [
       ["Total de Itens Cadastrados", kpis.totalCadastrado],
       ["Itens Críticos em Falta", `${kpis.criticosFalta} / ${kpis.criticosTotal}`],
       ["Itens Não Críticos em Falta", `${kpis.naoCriticosFalta} / ${kpis.naoCriticosTotal}`],
       ["Total de Unidades a Comprar", kpis.totalComprar],
-      [],
-      ["Praça", "Itens em Falta", "Unidades a Comprar"],
-      ...PRACAS.map((p) => [p, faltantesPorPraca[p] || 0, comprasPorPraca.find((c) => c.praca === p)?.qtd || 0]),
     ];
-    const wsResumo = XLSX.utils.aoa_to_sheet(resumoData);
-    wsResumo["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+    metrics.forEach(([label, value], i) => {
+      dataRow(wsResumo, r, [label, value, ""], { zebra: i % 2 === 1 });
+      r++;
+    });
+    r++;
 
-    const estoqueHeader = ["Praça", "Item", "Crítico", "Mínimo", "Atual", "Falta/Excedente", "Comprar"];
-    const estoqueData = [estoqueHeader, ...estoqueRows.map((d) => [d.praca, d.item, d.critico ? "Sim" : "Não", d.min, d.atual, d.falta, d.comprar])];
-    const wsEstoque = XLSX.utils.aoa_to_sheet(estoqueData);
-    wsEstoque["!cols"] = [{ wch: 15 }, { wch: 24 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, wsEstoque, "Estoque Completo");
+    headerRow(wsResumo, r, ["Praça", "Itens em Falta", "Unidades a Comprar"]);
+    r++;
+    PRACAS.forEach((p, i) => {
+      const qtd = comprasPorPraca.find((c) => c.praca === p)?.qtd || 0;
+      const row = dataRow(wsResumo, r, [p, faltantesPorPraca[p] || 0, qtd], { zebra: i % 2 === 1, rightAlignFrom: 1 });
+      row.getCell(1).font = { bold: true, color: { argb: PRACA_COLORS[p].replace("#", "FF") } };
+      r++;
+    });
 
+    // ---------------- Estoque Completo ----------------
+    const wsEstoque = wb.addWorksheet("Estoque Completo");
+    wsEstoque.columns = [{ width: 15 }, { width: 26 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 10 }];
+    headerRow(wsEstoque, 1, ["Praça", "Item", "Crítico", "Mínimo", "Atual", "Falta/Excedente", "Comprar"]);
+    wsEstoque.views = [{ state: "frozen", ySplit: 1 }];
+    estoqueRows.forEach((d, i) => {
+      const row = dataRow(wsEstoque, i + 2, [d.praca, d.item, d.critico ? "Sim" : "Não", d.min, d.atual, d.falta, d.comprar], { zebra: i % 2 === 1, rightAlignFrom: 3 });
+      if (d.falta < 0) row.getCell(6).font = { color: { argb: ROSE }, bold: true };
+      if (d.comprar > 0) row.getCell(7).font = { bold: true };
+    });
+    wsEstoque.autoFilter = { from: "A1", to: "G1" };
+    wsEstoque.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+
+    // ---------------- Compra por praça ----------------
     PRACAS.forEach((p) => {
       const itens = estoqueRows.filter((d) => d.praca === p && d.comprar > 0).sort((a, b) => b.comprar - a.comprar);
       const total = itens.reduce((s, d) => s + d.comprar, 0);
-      const rows = [
-        ["Solicitação de Compra — MUDE"],
-        [`Praça: ${p}`],
-        [`Data: ${dateStr}`],
-        [],
-        ["Item", "Crítico", "Quantidade a Comprar"],
-        ...(itens.length > 0 ? itens.map((d) => [d.item, d.critico ? "Sim" : "Não", d.comprar]) : [["Nenhum item precisa de compra nesta praça", "", ""]]),
-        [],
-        ["Total", "", total],
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 22 }];
       const sheetName = `Compra - ${p}`.slice(0, 31);
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      const ws = wb.addWorksheet(sheetName);
+      ws.columns = [{ width: 30 }, { width: 12 }, { width: 22 }];
+      const pracaColor = PRACA_COLORS[p].replace("#", "FF");
+      let rr = titleBlock(ws, 3, `Solicitação de Compra — ${p}`, [`Data: ${dateStr}`, "Responsável pela solicitação: ________________________"], pracaColor);
+
+      headerRow(ws, rr, ["Item", "Crítico", "Quantidade a Comprar"], pracaColor);
+      rr++;
+      if (itens.length === 0) {
+        dataRow(ws, rr, ["Nenhum item precisa de compra nesta praça no momento.", "", ""]);
+        rr++;
+      } else {
+        itens.forEach((d, i) => {
+          const row = dataRow(ws, rr, [d.item, d.critico ? "Sim" : "Não", d.comprar], { zebra: i % 2 === 1, rightAlignFrom: 2 });
+          if (d.critico) row.getCell(2).font = { color: { argb: ROSE }, bold: true };
+          rr++;
+        });
+      }
+      const totalRow = ws.getRow(rr);
+      totalRow.getCell(1).value = "Total";
+      totalRow.getCell(1).font = { bold: true };
+      totalRow.getCell(3).value = total;
+      totalRow.getCell(3).font = { bold: true };
+      totalRow.getCell(3).alignment = { horizontal: "right" };
+      [1, 2, 3].forEach((c) => {
+        totalRow.getCell(c).border = { top: { style: "double", color: { argb: "FF1E293B" } } };
+      });
+      rr += 3;
+
+      ws.getCell(rr, 1).value = "Aprovado por: ________________________";
+      ws.getCell(rr, 1).font = { size: 10, color: { argb: "FF64748B" } };
+      rr += 2;
+      ws.getCell(rr, 1).value = "Data de entrega prevista: ________________________";
+      ws.getCell(rr, 1).font = { size: 10, color: { argb: "FF64748B" } };
+
+      ws.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
     });
 
-    XLSX.writeFile(wb, `painel-estoque-mude-${now.toISOString().slice(0, 10)}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `painel-estoque-mude-${now.toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function togglePresentMode() {
