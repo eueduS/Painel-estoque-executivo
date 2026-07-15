@@ -11,7 +11,6 @@ import {
   ChevronRight,
   ChevronDown,
   HelpCircle,
-  X,
   TrendingUp,
   LayoutGrid,
   ArrowLeftRight,
@@ -351,11 +350,11 @@ function PracaHealthRow({ praca, total, faltando, sharedMax, color, t }) {
   );
 }
 
-function CriticoChipRow({ value, onChange, counts, t }) {
+function CriticoChipRow({ value, onChange, counts, t, onTodos }) {
   return (
     <div className="flex flex-wrap gap-2 mb-4">
       <button
-        onClick={() => onChange(null)}
+        onClick={() => (onTodos ? onTodos() : onChange(null))}
         className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
           value === null ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
         }`}
@@ -415,7 +414,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState("resumo");
   const [expandedPraca, setExpandedPraca] = useState(null);
-  const [quickFilter, setQuickFilter] = useState(null);
+  const [somenteEmFalta, setSomenteEmFalta] = useState(false);
   const [pracaFilter, setPracaFilter] = useState(null);
   const [criticoFilter, setCriticoFilter] = useState(null);
   const [pracaFilterFalt, setPracaFilterFalt] = useState(null);
@@ -525,16 +524,15 @@ export default function App() {
 
   const filteredRows = useMemo(() => {
     let rows = estoqueRows;
-    if (quickFilter === "criticos") rows = rows.filter((d) => d.critico && d.falta < 0);
-    if (quickFilter === "naoCriticos") rows = rows.filter((d) => !d.critico && d.falta < 0);
     if (pracaFilter) rows = rows.filter((d) => d.praca === pracaFilter);
     if (criticoFilter !== null) rows = rows.filter((d) => d.critico === criticoFilter);
+    if (somenteEmFalta) rows = rows.filter((d) => d.falta < 0);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter((d) => d.item.toLowerCase().includes(q) || d.praca.toLowerCase().includes(q));
     }
     return rows;
-  }, [estoqueRows, quickFilter, pracaFilter, criticoFilter, search]);
+  }, [estoqueRows, pracaFilter, criticoFilter, somenteEmFalta, search]);
 
   const itensPorPraca = useMemo(() => {
     const map = {};
@@ -583,14 +581,21 @@ export default function App() {
 
   useEffect(() => {
     setPage(0);
-  }, [quickFilter, pracaFilter, criticoFilter, search]);
+  }, [somenteEmFalta, pracaFilter, criticoFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const currentPage = Math.min(page, totalPages - 1);
   const pagedRows = filteredRows.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
 
-  function toggleQuickFilter(name) {
-    setQuickFilter((prev) => (prev === name ? null : name));
+  function toggleQuickFilter(criticoValue) {
+    const alreadyActive = criticoFilter === criticoValue && somenteEmFalta;
+    if (alreadyActive) {
+      setCriticoFilter(null);
+      setSomenteEmFalta(false);
+    } else {
+      setCriticoFilter(criticoValue);
+      setSomenteEmFalta(true);
+    }
     setActiveTab("estoque");
   }
 
@@ -650,8 +655,8 @@ export default function App() {
                 total={kpis.criticosTotal}
                 color={COLOR_ROSE}
                 colorClass="text-rose-500"
-                active={quickFilter === "criticos"}
-                onClick={() => toggleQuickFilter("criticos")}
+                active={criticoFilter === true && somenteEmFalta}
+                onClick={() => toggleQuickFilter(true)}
               />
               <BigFractionCard
                 t={t}
@@ -661,8 +666,8 @@ export default function App() {
                 total={kpis.naoCriticosTotal}
                 color={COLOR_AMBER}
                 colorClass="text-amber-500"
-                active={quickFilter === "naoCriticos"}
-                onClick={() => toggleQuickFilter("naoCriticos")}
+                active={criticoFilter === false && somenteEmFalta}
+                onClick={() => toggleQuickFilter(false)}
               />
             </div>
 
@@ -952,8 +957,30 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por importância</p>
-              <CriticoChipRow value={criticoFilter} onChange={setCriticoFilter} counts={criticosCount} t={t} />
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                <p className={`text-xs font-semibold uppercase tracking-wide ${t.textDim}`}>Filtrar por importância</p>
+                <button
+                  onClick={() => setSomenteEmFalta((prev) => !prev)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+                  style={
+                    somenteEmFalta
+                      ? { color: COLOR_ROSE, borderColor: COLOR_ROSE, backgroundColor: `${COLOR_ROSE}1A` }
+                      : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }
+                  }
+                >
+                  Só itens em falta
+                </button>
+              </div>
+              <CriticoChipRow
+                value={criticoFilter}
+                onChange={setCriticoFilter}
+                counts={criticosCount}
+                t={t}
+                onTodos={() => {
+                  setCriticoFilter(null);
+                  setSomenteEmFalta(false);
+                }}
+              />
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative flex-1 min-w-[220px]">
                   <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
@@ -964,19 +991,6 @@ export default function App() {
                     className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
                   />
                 </div>
-                {quickFilter && (
-                  <button
-                    onClick={() => setQuickFilter(null)}
-                    className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border font-medium"
-                    style={{
-                      borderColor: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
-                      color: quickFilter === "criticos" ? COLOR_ROSE : COLOR_AMBER,
-                    }}
-                  >
-                    Filtrado por: {quickFilter === "criticos" ? "Itens Críticos em Falta" : "Itens Não Críticos em Falta"}
-                    <X size={12} />
-                  </button>
-                )}
                 <span className={`text-xs ${t.textFaint}`}>{filteredRows.length} itens encontrados</span>
               </div>
             </div>
