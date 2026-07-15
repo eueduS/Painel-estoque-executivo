@@ -65,7 +65,7 @@ function fetchGvizTab(gid) {
           reject(new Error("Planilha retornou erro"));
           return;
         }
-        const cols = (json.table.cols || []).map((c) => (c.label || c.id || "").toString().trim());
+        const cols = (json.table.cols || []).map((c) => (c.label || "").toString().trim());
         const rows = (json.table.rows || []).map((r) =>
           (r.c || []).map((cell) => {
             if (!cell) return "";
@@ -495,8 +495,10 @@ export default function App() {
       const [est, mov] = await Promise.all([fetchGvizTab(GID_ESTOQUE), fetchGvizTab(GID_MOV)]);
       const parsed = parseEstoqueRows(est.cols, est.rows);
       if (parsed.length > 0) setEstoqueRows(parsed);
-      setMovCols(mov.cols);
-      setMovRows(mov.rows.filter((r) => r.some((v) => v !== "")));
+      const rawMovRows = mov.rows.filter((r) => r.some((v) => v !== ""));
+      const keep = mov.cols.map((c, i) => c.trim() !== "" || rawMovRows.some((r) => r[i] !== undefined && r[i] !== ""));
+      setMovCols(mov.cols.filter((_, i) => keep[i]));
+      setMovRows(rawMovRows.map((r) => r.filter((_, i) => keep[i])));
       setSyncError(false);
       setSyncErrorDetail("");
     } catch (e) {
