@@ -373,6 +373,54 @@ function HelpModal({ onClose, t }) {
   );
 }
 
+const APP_PASSWORD = "EstoqueMude2026"; // Troque esta senha antes de publicar. Proteção simples do lado do navegador, não é segurança robusta.
+
+function PasswordGate({ onUnlock, t }) {
+  const [input, setInput] = useState("");
+  const [error, setError] = useState(false);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (input === APP_PASSWORD) {
+      try {
+        sessionStorage.setItem("painel_estoque_unlocked", "1");
+      } catch (err) {
+        /* sessionStorage indisponível; segue sem lembrar entre recarregamentos */
+      }
+      onUnlock();
+    } else {
+      setError(true);
+    }
+  }
+
+  return (
+    <div className={`min-h-screen flex items-center justify-center ${t.bg} ${t.text} px-4`}>
+      <form onSubmit={handleSubmit} className={`rounded-2xl border ${t.border} ${t.bgAlt} p-8 max-w-sm w-full`}>
+        <span className="text-2xl font-extrabold leading-none block mb-3" style={{ fontFamily: "'Baloo 2', sans-serif", color: "#FF2D6E" }}>
+          mude
+        </span>
+        <h1 className="font-display text-lg font-bold mb-1">Painel Executivo de Estoque</h1>
+        <p className={`text-xs mb-5 ${t.textDim}`}>Digite a senha de acesso para continuar.</p>
+        <input
+          type="password"
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value);
+            setError(false);
+          }}
+          placeholder="Senha"
+          autoFocus
+          className={`w-full px-3 py-2 rounded-lg border text-sm mb-3 ${t.inputBorder} ${t.inputBg} ${t.text}`}
+        />
+        {error && <p className="text-xs mb-3" style={{ color: COLOR_ROSE }}>Senha incorreta. Tente novamente.</p>}
+        <button type="submit" className="w-full py-2 rounded-lg text-white text-sm font-semibold transition-colors" style={{ backgroundColor: "#6366F1" }}>
+          Entrar
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function LastUpdatedBadge({ lastUpdated, syncing, syncError, onRefresh, t }) {
   function formatHMS(d) {
     if (!d) return "--:--:--";
@@ -465,6 +513,14 @@ function TabBar({ tabs, active, onChange, t }) {
    ========================================================================= */
 export default function App() {
   const { dark, setDark, t } = useTheme();
+
+  const [unlocked, setUnlocked] = useState(() => {
+    try {
+      return sessionStorage.getItem("painel_estoque_unlocked") === "1";
+    } catch (err) {
+      return false;
+    }
+  });
 
   const [estoqueRows, setEstoqueRows] = useState(estoqueDataFallback);
   const [movCols, setMovCols] = useState([]);
@@ -842,6 +898,10 @@ export default function App() {
     { id: "estoque", label: "Estoque Completo", icon: <Package size={16} /> },
     { id: "movimentacoes", label: "Movimentações", icon: <ArrowLeftRight size={16} /> },
   ];
+
+  if (!unlocked) {
+    return <PasswordGate onUnlock={() => setUnlocked(true)} t={t} />;
+  }
 
   return (
     <div className={`min-h-screen ${t.bg} ${t.text} transition-colors duration-300`}>
