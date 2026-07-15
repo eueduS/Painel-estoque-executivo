@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import ExcelJS from "exceljs";
-import mudeLogo from "./assets/mude-logo.jpeg";
+import mudeLogo from "./assets/mude-logo.png";
 import {
   Package,
   MapPin,
