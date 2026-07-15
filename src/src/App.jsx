@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import mudeLogo from "./assets/mude-logo.jpeg";
 import {
   Package,
   MapPin,
@@ -8,6 +9,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   HelpCircle,
   X,
   TrendingUp,
@@ -380,6 +382,7 @@ export default function App() {
   const [syncErrorDetail, setSyncErrorDetail] = useState("");
 
   const [activeTab, setActiveTab] = useState("resumo");
+  const [expandedPraca, setExpandedPraca] = useState(null);
   const [quickFilter, setQuickFilter] = useState(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -456,6 +459,20 @@ export default function App() {
     [estoqueRows]
   );
 
+  const itensParaComprarPorPraca = useMemo(() => {
+    const map = {};
+    PRACAS.forEach((p) => {
+      map[p] = estoqueRows
+        .filter((d) => d.praca === p && d.comprar > 0)
+        .sort((a, b) => b.prioridade - a.prioridade || b.comprar - a.comprar);
+    });
+    return map;
+  }, [estoqueRows]);
+
+  function togglePracaExpand(praca) {
+    setExpandedPraca((prev) => (prev === praca ? null : praca));
+  }
+
   const topCompras = useMemo(() => {
     const map = {};
     estoqueRows.forEach((d) => {
@@ -505,9 +522,7 @@ export default function App() {
         <div className="flex items-start sm:items-center justify-between mb-6 flex-col sm:flex-row gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl font-extrabold leading-none" style={{ fontFamily: "'Baloo 2', sans-serif", color: "#FF2D6E" }}>
-                mude
-              </span>
+              <img src={mudeLogo} alt="mude" className="h-6 sm:h-7 w-auto rounded" />
               <span className={`font-display text-xs font-semibold uppercase tracking-[0.2em] ${t.textFaint}`}>· Operações</span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-bold">Painel Executivo de Estoque</h1>
@@ -535,7 +550,12 @@ export default function App() {
 
         {activeTab === "resumo" && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Registros ativos nas 5 praças." />
+              <KpiCard t={t} icon={<MapPin size={16} />} label="Praças Ativas" value="5 Praças" note={PRACAS.join(", ")} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
               <BigFractionCard
                 t={t}
                 title="Itens Críticos em Falta"
@@ -558,11 +578,6 @@ export default function App() {
                 active={quickFilter === "naoCriticos"}
                 onClick={() => toggleQuickFilter("naoCriticos")}
               />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-              <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Registros ativos nas 5 praças." />
-              <KpiCard t={t} icon={<MapPin size={16} />} label="Praças Ativas" value="5 Praças" note={PRACAS.join(", ")} />
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
@@ -636,18 +651,54 @@ export default function App() {
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
-              <h2 className="font-display text-sm font-semibold uppercase tracking-wide mb-4">Resumo por Praça</h2>
+              <div className="flex items-center gap-1.5 mb-1">
+                <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Resumo por Praça</h2>
+                <Tooltip text="Clique numa praça para ver exatamente quais itens precisam ser comprados ali." />
+              </div>
+              <p className={`text-xs mb-4 ${t.textFaint}`}>Clique numa praça para ver os itens</p>
               <div className={`divide-y ${t.border}`}>
-                {comprasPorPraca.map((row) => (
-                  <div key={row.praca} className="flex items-center justify-between py-2 text-sm">
-                    <span className="font-semibold" style={{ color: PRACA_COLORS[row.praca] }}>
-                      {row.praca}
-                    </span>
-                    <span className={t.textDim}>
-                      {row.itensComFalta} itens · <span className="font-mono font-semibold text-indigo-400">{row.qtd} un.</span>
-                    </span>
-                  </div>
-                ))}
+                {comprasPorPraca.map((row) => {
+                  const isOpen = expandedPraca === row.praca;
+                  const itens = itensParaComprarPorPraca[row.praca] || [];
+                  return (
+                    <div key={row.praca}>
+                      <button
+                        onClick={() => togglePracaExpand(row.praca)}
+                        className={`w-full flex items-center justify-between py-3 text-sm ${t.cardHover} rounded-lg px-2 -mx-2 transition-colors`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <ChevronDown size={14} className={`${t.textFaint} transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                          <span className="font-semibold" style={{ color: PRACA_COLORS[row.praca] }}>
+                            {row.praca}
+                          </span>
+                        </span>
+                        <span className={t.textDim}>
+                          {row.itensComFalta} itens · <span className="font-mono font-semibold text-indigo-400">{row.qtd} un.</span>
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="pb-3 pl-6 pr-2 space-y-1.5">
+                          {itens.length === 0 ? (
+                            <p className={`text-xs ${t.textFaint}`}>Nenhum item precisa de compra nesta praça no momento. 🎉</p>
+                          ) : (
+                            itens.map((d, i) => (
+                              <div key={i} className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-lg ${t.dark ? "bg-zinc-800/50" : "bg-slate-100"}`}>
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <span className={`truncate ${t.text}`}>{d.item}</span>
+                                  {d.critico && <span className="shrink-0 px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 text-[10px] font-semibold">Crítico</span>}
+                                </span>
+                                <span className="flex items-center gap-3 shrink-0 ml-2">
+                                  <span className={t.textFaint}>prioridade {d.prioridade}</span>
+                                  <span className="font-mono font-semibold text-indigo-400">{d.comprar} un.</span>
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </>
