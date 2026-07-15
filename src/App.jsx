@@ -853,6 +853,9 @@ export default function App() {
                   className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
                 />
               </div>
+              <p className={`text-xs mt-3 ${t.textFaint}`}>
+                {faltantesRows.length} itens encontrados · <span className="font-mono font-semibold text-indigo-400">{faltantesRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar</span>
+              </p>
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
@@ -991,7 +994,9 @@ export default function App() {
                     className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
                   />
                 </div>
-                <span className={`text-xs ${t.textFaint}`}>{filteredRows.length} itens encontrados</span>
+                <span className={`text-xs ${t.textFaint}`}>
+                  {filteredRows.length} itens encontrados · <span className="font-mono font-semibold text-indigo-400">{filteredRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar</span>
+                </span>
               </div>
             </div>
 
