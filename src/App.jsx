@@ -713,8 +713,8 @@ export default function App() {
                     <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} vertical={false} />
                     <XAxis dataKey="praca" tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} interval={0} angle={-15} textAnchor="end" height={50} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
-                    <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
-                    <Bar dataKey="qtd" name="Unidades a comprar" radius={[4, 4, 0, 0]} activeBar={false}>
+                    <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: t.dark ? "#f1f5f9" : "#1e293b", fontWeight: 600, marginBottom: 4 }} itemStyle={{ color: t.dark ? "#cbd5e1" : "#334155" }} />
+                    <Bar dataKey="qtd" name="Unidades a comprar" radius={[4, 4, 0, 0]} activeBar={false} background={false}>
                       {comprasPorPraca.map((row) => (
                         <Cell key={row.praca} fill={PRACA_COLORS[row.praca]} />
                       ))}
@@ -734,8 +734,8 @@ export default function App() {
                     <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} horizontal={false} />
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
                     <YAxis type="category" dataKey="item" width={110} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
-                    <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
-                    <Bar dataKey="qtd" fill="#6366F1" radius={[0, 4, 4, 0]} name="Unidades a comprar" activeBar={false} />
+                    <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: t.dark ? "#f1f5f9" : "#1e293b", fontWeight: 600, marginBottom: 4 }} itemStyle={{ color: t.dark ? "#cbd5e1" : "#334155" }} />
+                    <Bar dataKey="qtd" fill="#6366F1" radius={[0, 4, 4, 0]} name="Unidades a comprar" activeBar={false} background={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -808,10 +808,10 @@ export default function App() {
                   <CartesianGrid strokeDasharray="3 3" stroke={t.dark ? "#27272a" : "#e2e8f0"} vertical={false} />
                   <XAxis dataKey="praca" tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} interval={0} angle={-15} textAnchor="end" height={50} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
-                  <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
+                  <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: t.dark ? "#f1f5f9" : "#1e293b", fontWeight: 600, marginBottom: 4 }} itemStyle={{ color: t.dark ? "#cbd5e1" : "#334155" }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {criticoFilterFalt !== false && <Bar dataKey="Críticos em Falta" stackId="a" fill={COLOR_ROSE} radius={criticoFilterFalt === true ? [4, 4, 0, 0] : [0, 0, 0, 0]} activeBar={false} />}
-                  {criticoFilterFalt !== true && <Bar dataKey="Não Críticos em Falta" stackId="a" fill={COLOR_AMBER} radius={[4, 4, 0, 0]} activeBar={false} />}
+                  {criticoFilterFalt !== false && <Bar dataKey="Críticos em Falta" stackId="a" fill={COLOR_ROSE} radius={criticoFilterFalt === true ? [4, 4, 0, 0] : [0, 0, 0, 0]} activeBar={false} background={false} />}
+                  {criticoFilterFalt !== true && <Bar dataKey="Não Críticos em Falta" stackId="a" fill={COLOR_AMBER} radius={[4, 4, 0, 0]} activeBar={false} background={false} />}
                 </BarChart>
               </ResponsiveContainer>
             </div>
