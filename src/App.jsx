@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   ArrowLeftRight,
   AlertTriangle,
+  X,
 } from "lucide-react";
 import {
   BarChart,
@@ -311,6 +312,63 @@ function KpiCard({ icon, label, value, note, t }) {
   );
 }
 
+const TAB_HELP = [
+  {
+    label: "Resumo",
+    color: "#6366F1",
+    text: "Visão rápida do estado geral: quantos itens críticos e não críticos estão em falta (contagem de registros), e a saúde do estoque por praça. É o ponto de partida.",
+  },
+  {
+    label: "Itens Faltantes",
+    color: COLOR_ROSE,
+    text: "Só os itens abaixo do mínimo — nada do que já está OK entra aqui. Filtra por praça e por criticidade, pra saber exatamente o que precisa de ação agora.",
+  },
+  {
+    label: "Compras",
+    color: "#6366F1",
+    text: "Foca em UNIDADES a comprar, não em quantos itens — por isso os números daqui não batem com os cards de contagem do Resumo. Serve pra planejar pedidos de compra.",
+  },
+  {
+    label: "Estoque Completo",
+    color: "#6366F1",
+    text: "O registro completo: todos os itens cadastrados nas 5 praças, críticos e não críticos, em falta ou não. Filtrável por praça e importância — é a consulta geral.",
+  },
+  {
+    label: "Movimentações",
+    color: "#6366F1",
+    text: "Histórico de entradas e saídas, direto da aba \"Movimentações\" da planilha do Google Sheets.",
+  },
+];
+
+function HelpModal({ onClose, t }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div
+        className={`rounded-2xl border ${t.border} ${t.bgAlt} p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}
+        style={{ backgroundColor: t.dark ? "#0a0a0f" : "#fff" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className={`font-display text-base font-bold ${t.text}`}>Como usar este painel</h2>
+          <button onClick={onClose} className={`p-1 rounded-lg ${t.cardHover}`}>
+            <X size={18} className={t.textDim} />
+          </button>
+        </div>
+        <div className="space-y-4">
+          {TAB_HELP.map((tab) => (
+            <div key={tab.label}>
+              <p className="text-sm font-semibold mb-1" style={{ color: tab.color }}>
+                {tab.label}
+              </p>
+              <p className={`text-xs leading-relaxed ${t.textDim}`}>{tab.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LastUpdatedBadge({ lastUpdated, syncing, syncError, onRefresh, t }) {
   function formatHMS(d) {
     if (!d) return "--:--:--";
@@ -413,6 +471,7 @@ export default function App() {
   const [syncErrorDetail, setSyncErrorDetail] = useState("");
 
   const [activeTab, setActiveTab] = useState("resumo");
+  const [showHelp, setShowHelp] = useState(false);
   const [expandedPraca, setExpandedPraca] = useState(null);
   const [somenteEmFalta, setSomenteEmFalta] = useState(false);
   const [pracaFilter, setPracaFilter] = useState(null);
@@ -622,6 +681,13 @@ export default function App() {
           <div className="flex items-center gap-2">
             <LastUpdatedBadge lastUpdated={lastUpdated} syncing={syncing} syncError={syncError} onRefresh={refreshData} t={t} />
             <button
+              onClick={() => setShowHelp(true)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
+              title="Como usar este painel"
+            >
+              <HelpCircle size={16} />
+            </button>
+            <button
               onClick={() => setDark(!dark)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${t.border} ${t.bgAlt} ${t.cardHover} text-sm transition-colors`}
             >
@@ -629,6 +695,8 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {showHelp && <HelpModal onClose={() => setShowHelp(false)} t={t} />}
 
         {syncError && (
           <div className="mb-6 px-4 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs">
