@@ -844,6 +844,17 @@ export default function App() {
               </div>
               <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por importância</p>
               <CriticoChipRow value={criticoFilterFalt} onChange={setCriticoFilterFalt} counts={criticosFaltantesCount} t={t} />
+
+              <div className="max-w-xs mb-4">
+                <KpiCard
+                  t={t}
+                  icon={<TrendingUp size={16} />}
+                  label="Unidades a Comprar"
+                  value={`${faltantesRows.reduce((s, d) => s + d.comprar, 0)} un.`}
+                  note="Considerando os filtros aplicados acima."
+                />
+              </div>
+
               <div className="relative">
                 <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
                 <input
@@ -853,15 +864,10 @@ export default function App() {
                   className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
                 />
               </div>
-              <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
-                <span className={`text-xs ${t.textFaint}`}>
-                  {faltantesRows.length} itens encontrados
-                  {faltantesRows.length > 0 && <> ({faltantesRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full">
-                  {faltantesRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar
-                </span>
-              </div>
+              <span className={`block text-xs mt-3 ${t.textFaint}`}>
+                {faltantesRows.length} itens encontrados
+                {faltantesRows.length > 0 && <> ({faltantesRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
+              </span>
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
@@ -990,6 +996,17 @@ export default function App() {
                   setSomenteEmFalta(false);
                 }}
               />
+
+              <div className="max-w-xs mb-4">
+                <KpiCard
+                  t={t}
+                  icon={<TrendingUp size={16} />}
+                  label="Unidades a Comprar"
+                  value={`${filteredRows.reduce((s, d) => s + d.comprar, 0)} un.`}
+                  note="Considerando os filtros aplicados acima."
+                />
+              </div>
+
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative flex-1 min-w-[220px]">
                   <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
@@ -1003,9 +1020,6 @@ export default function App() {
                 <span className={`text-xs ${t.textFaint}`}>
                   {filteredRows.length} itens encontrados
                   {filteredRows.length > 0 && <> ({filteredRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full">
-                  {filteredRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar
                 </span>
               </div>
             </div>
