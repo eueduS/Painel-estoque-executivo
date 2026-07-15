@@ -853,9 +853,15 @@ export default function App() {
                   className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text}`}
                 />
               </div>
-              <p className={`text-xs mt-3 ${t.textFaint}`}>
-                {faltantesRows.length} itens encontrados · <span className="font-mono font-semibold text-indigo-400">{faltantesRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar</span>
-              </p>
+              <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
+                <span className={`text-xs ${t.textFaint}`}>
+                  {faltantesRows.length} itens encontrados
+                  {faltantesRows.length > 0 && <> ({faltantesRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full">
+                  {faltantesRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar
+                </span>
+              </div>
             </div>
 
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} overflow-hidden`}>
@@ -995,7 +1001,11 @@ export default function App() {
                   />
                 </div>
                 <span className={`text-xs ${t.textFaint}`}>
-                  {filteredRows.length} itens encontrados · <span className="font-mono font-semibold text-indigo-400">{filteredRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar</span>
+                  {filteredRows.length} itens encontrados
+                  {filteredRows.length > 0 && <> ({filteredRows.filter((d) => d.comprar > 0).length} com compra pendente)</>}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full">
+                  {filteredRows.reduce((s, d) => s + d.comprar, 0)} un. a comprar
                 </span>
               </div>
             </div>
