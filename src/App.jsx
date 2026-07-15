@@ -351,6 +351,35 @@ function PracaHealthRow({ praca, total, faltando, sharedMax, color, t }) {
   );
 }
 
+function CriticoChipRow({ value, onChange, counts, t }) {
+  return (
+    <div className="flex flex-wrap gap-2 mb-4">
+      <button
+        onClick={() => onChange(null)}
+        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+          value === null ? `${t.text} border-current` : `${t.textFaint} ${t.border} ${t.cardHover}`
+        }`}
+      >
+        Todos ({counts.sim + counts.nao})
+      </button>
+      <button
+        onClick={() => onChange(value === true ? null : true)}
+        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+        style={value === true ? { color: COLOR_ROSE, borderColor: COLOR_ROSE, backgroundColor: `${COLOR_ROSE}1A` } : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }}
+      >
+        Críticos ({counts.sim})
+      </button>
+      <button
+        onClick={() => onChange(value === false ? null : false)}
+        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${t.cardHover}`}
+        style={value === false ? { color: COLOR_AMBER, borderColor: COLOR_AMBER, backgroundColor: `${COLOR_AMBER}1A` } : { color: t.dark ? "#71717a" : "#94a3b8", borderColor: t.dark ? "#3f3f46" : "#e2e8f0" }}
+      >
+        Não Críticos ({counts.nao})
+      </button>
+    </div>
+  );
+}
+
 function TabBar({ tabs, active, onChange, t }) {
   return (
     <div className={`flex flex-wrap gap-2 border-b ${t.border} mb-6 pb-0`}>
@@ -388,7 +417,9 @@ export default function App() {
   const [expandedPraca, setExpandedPraca] = useState(null);
   const [quickFilter, setQuickFilter] = useState(null);
   const [pracaFilter, setPracaFilter] = useState(null);
+  const [criticoFilter, setCriticoFilter] = useState(null);
   const [pracaFilterFalt, setPracaFilterFalt] = useState(null);
+  const [criticoFilterFalt, setCriticoFilterFalt] = useState(null);
   const [searchFalt, setSearchFalt] = useState("");
   const [pageFalt, setPageFalt] = useState(0);
   const [search, setSearch] = useState("");
@@ -497,12 +528,13 @@ export default function App() {
     if (quickFilter === "criticos") rows = rows.filter((d) => d.critico && d.falta < 0);
     if (quickFilter === "naoCriticos") rows = rows.filter((d) => !d.critico && d.falta < 0);
     if (pracaFilter) rows = rows.filter((d) => d.praca === pracaFilter);
+    if (criticoFilter !== null) rows = rows.filter((d) => d.critico === criticoFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter((d) => d.item.toLowerCase().includes(q) || d.praca.toLowerCase().includes(q));
     }
     return rows;
-  }, [estoqueRows, quickFilter, pracaFilter, search]);
+  }, [estoqueRows, quickFilter, pracaFilter, criticoFilter, search]);
 
   const itensPorPraca = useMemo(() => {
     const map = {};
@@ -512,6 +544,11 @@ export default function App() {
     return map;
   }, [estoqueRows]);
 
+  const criticosCount = useMemo(
+    () => ({ sim: estoqueRows.filter((d) => d.critico).length, nao: estoqueRows.filter((d) => !d.critico).length }),
+    [estoqueRows]
+  );
+
   const faltantesPorPraca = useMemo(() => {
     const map = {};
     PRACAS.forEach((p) => {
@@ -520,19 +557,25 @@ export default function App() {
     return map;
   }, [estoqueRows]);
 
+  const criticosFaltantesCount = useMemo(() => {
+    const faltando = estoqueRows.filter((d) => d.falta < 0);
+    return { sim: faltando.filter((d) => d.critico).length, nao: faltando.filter((d) => !d.critico).length };
+  }, [estoqueRows]);
+
   const faltantesRows = useMemo(() => {
     let rows = estoqueRows.filter((d) => d.falta < 0);
     if (pracaFilterFalt) rows = rows.filter((d) => d.praca === pracaFilterFalt);
+    if (criticoFilterFalt !== null) rows = rows.filter((d) => d.critico === criticoFilterFalt);
     if (searchFalt.trim()) {
       const q = searchFalt.trim().toLowerCase();
       rows = rows.filter((d) => d.item.toLowerCase().includes(q) || d.praca.toLowerCase().includes(q));
     }
     return rows.sort((a, b) => a.falta - b.falta);
-  }, [estoqueRows, pracaFilterFalt, searchFalt]);
+  }, [estoqueRows, pracaFilterFalt, criticoFilterFalt, searchFalt]);
 
   useEffect(() => {
     setPageFalt(0);
-  }, [pracaFilterFalt, searchFalt]);
+  }, [pracaFilterFalt, criticoFilterFalt, searchFalt]);
 
   const totalPagesFalt = Math.max(1, Math.ceil(faltantesRows.length / pageSize));
   const currentPageFalt = Math.min(pageFalt, totalPagesFalt - 1);
@@ -540,7 +583,7 @@ export default function App() {
 
   useEffect(() => {
     setPage(0);
-  }, [quickFilter, pracaFilter, search]);
+  }, [quickFilter, pracaFilter, criticoFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const currentPage = Math.min(page, totalPages - 1);
@@ -794,6 +837,8 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por importância</p>
+              <CriticoChipRow value={criticoFilterFalt} onChange={setCriticoFilterFalt} counts={criticosFaltantesCount} t={t} />
               <div className="relative">
                 <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
                 <input
@@ -907,6 +952,8 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${t.textDim}`}>Filtrar por importância</p>
+              <CriticoChipRow value={criticoFilter} onChange={setCriticoFilter} counts={criticosCount} t={t} />
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative flex-1 min-w-[220px]">
                   <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
