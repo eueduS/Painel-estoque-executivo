@@ -476,7 +476,7 @@ export default function App() {
 
   const faltantesPorPracaCriticidade = useMemo(
     () =>
-      PRACAS.map((p) => {
+      PRACAS.filter((p) => !pracaFilterFalt || p === pracaFilterFalt).map((p) => {
         const itens = estoqueRows.filter((d) => d.praca === p && d.falta < 0);
         return {
           praca: p,
@@ -484,7 +484,7 @@ export default function App() {
           "Não Críticos em Falta": itens.filter((d) => !d.critico).length,
         };
       }),
-    [estoqueRows]
+    [estoqueRows, pracaFilterFalt]
   );
 
   const comprasPorPraca = useMemo(
@@ -810,8 +810,8 @@ export default function App() {
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: t.dark ? "#94a3b8" : "#64748b" }} />
                   <RechartsTooltip contentStyle={{ background: t.dark ? "#18181b" : "#fff", border: `1px solid ${t.dark ? "#3f3f46" : "#e2e8f0"}`, borderRadius: 8, fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Críticos em Falta" stackId="a" fill={COLOR_ROSE} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Não Críticos em Falta" stackId="a" fill={COLOR_AMBER} radius={[4, 4, 0, 0]} />
+                  {criticoFilterFalt !== false && <Bar dataKey="Críticos em Falta" stackId="a" fill={COLOR_ROSE} radius={criticoFilterFalt === true ? [4, 4, 0, 0] : [0, 0, 0, 0]} />}
+                  {criticoFilterFalt !== true && <Bar dataKey="Não Críticos em Falta" stackId="a" fill={COLOR_AMBER} radius={[4, 4, 0, 0]} />}
                 </BarChart>
               </ResponsiveContainer>
             </div>
