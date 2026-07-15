@@ -373,7 +373,7 @@ function HelpModal({ onClose, t }) {
   );
 }
 
-const APP_PASSWORD = "EstoqueMude2026"; // Troque esta senha antes de publicar. Proteção simples do lado do navegador, não é segurança robusta.
+const APP_PASSWORD = "EstoqueMud3"; // Troque esta senha antes de publicar. Proteção simples do lado do navegador, não é segurança robusta.
 
 function PasswordGate({ onUnlock, t }) {
   const [input, setInput] = useState("");
