@@ -581,7 +581,7 @@ export default function App() {
       naoCriticosFalta: naoCriticos.filter((d) => d.falta < 0).length,
       naoCriticosTotal: naoCriticos.length,
       totalComprar: estoqueRows.reduce((s, d) => s + d.comprar, 0),
-      totalCadastrado: estoqueRows.length,
+      totalCadastrado: new Set(estoqueRows.map((d) => d.item)).size,
     };
   }, [estoqueRows]);
 
@@ -967,7 +967,7 @@ export default function App() {
         {activeTab === "resumo" && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Registros ativos nas 5 praças." />
+              <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Produtos únicos do catálogo, sem duplicar por praça." />
               <KpiCard t={t} icon={<MapPin size={16} />} label="Praças Ativas" value="5 Praças" note={PRACAS.join(", ")} />
             </div>
 
