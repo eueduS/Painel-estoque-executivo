@@ -41,6 +41,10 @@ const GID_ESTOQUE = "921689702";
 const GID_MOV = "1296693011";
 const REFRESH_MS = 60000;
 
+// Itens que continuam controlados na aba Estoque (planilha), mas não são
+// equipamento de estação — por isso ficam de fora de todas as telas do painel.
+const ITENS_NAO_ESTACAO = ["Fita 3M"];
+
 let gvizCounter = 0;
 function fetchGvizTab(gid) {
   return new Promise((resolve, reject) => {
@@ -115,7 +119,8 @@ function parseEstoqueRows(cols, rows) {
       prioridade: Number(r[idx.prioridade]) || 0,
       comprar: Number(r[idx.comprar]) || 0,
     }))
-    .filter((r) => r.praca && r.item);
+    .filter((r) => r.praca && r.item)
+    .filter((r) => !ITENS_NAO_ESTACAO.includes(r.item));
 }
 
 /* =========================================================================
@@ -522,7 +527,9 @@ export default function App() {
     }
   });
 
-  const [estoqueRows, setEstoqueRows] = useState(estoqueDataFallback);
+  const [estoqueRows, setEstoqueRows] = useState(
+    estoqueDataFallback.filter((r) => !ITENS_NAO_ESTACAO.includes(r.item))
+  );
   const [movCols, setMovCols] = useState([]);
   const [movRows, setMovRows] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -572,25 +579,27 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const kpis = useMemo(() =>{
-  const criticoByItem = new Map();
-  const faltaByItem = new Map();
-  estoqueRows.forEach((d) => {
-    criticoByItem.set(d.item, criticoByItem.get(d.item) || d.critico);
-    if (d.falta < 0) faltaByItem.set(d.item, true);
-  });
-  const itemNames = [...criticoByItem.keys()];
-  const criticosItems = itemNames.filter((n) => criticoByItem.get(n));
-  const naoCriticosItems = itemNames.filter((n) => !criticoByItem.get(n));
-  return {
-    criticosTotal: criticosItems.length,
-    criticosFalta: criticosItems.filter((n) => faltaByItem.has(n)).length,
-    naoCriticosTotal: naoCriticosItems.length,
-    naoCriticosFalta: naoCriticosItems.filter((n) => faltaByItem.has(n)).length,
-    totalComprar: estoqueRows.reduce((s, d) => s + d.comprar, 0),
-    totalCadastrado: itemNames.length,
-  };
-}, [estoqueRows]);
+  const kpis = useMemo(() => {
+    // Produto é a unidade de contagem aqui (não praça×item), pra bater com
+    // "Total de Itens Cadastrados" e com a regra de não duplicar por praça.
+    const criticoByItem = new Map();
+    const faltaByItem = new Map();
+    estoqueRows.forEach((d) => {
+      criticoByItem.set(d.item, criticoByItem.get(d.item) || d.critico);
+      if (d.falta < 0) faltaByItem.set(d.item, true);
+    });
+    const itemNames = [...criticoByItem.keys()];
+    const criticosItems = itemNames.filter((n) => criticoByItem.get(n));
+    const naoCriticosItems = itemNames.filter((n) => !criticoByItem.get(n));
+    return {
+      criticosTotal: criticosItems.length,
+      criticosFalta: criticosItems.filter((n) => faltaByItem.has(n)).length,
+      naoCriticosTotal: naoCriticosItems.length,
+      naoCriticosFalta: naoCriticosItems.filter((n) => faltaByItem.has(n)).length,
+      totalComprar: estoqueRows.reduce((s, d) => s + d.comprar, 0),
+      totalCadastrado: itemNames.length,
+    };
+  }, [estoqueRows]);
 
   const saudeByPraca = useMemo(
     () =>
@@ -982,7 +991,7 @@ export default function App() {
               <BigFractionCard
                 t={t}
                 title="Itens Críticos em Falta"
-                tooltip="Peças críticas (essenciais para operação) que estão com estoque abaixo do mínimo recomendado, do total de peças críticas cadastradas na planilha."
+                tooltip="Produtos críticos (essenciais para operação) com falta em pelo menos uma praça, do total de produtos críticos do catálogo. Cada produto conta uma vez, mesmo se faltar em mais de uma praça."
                 falta={kpis.criticosFalta}
                 total={kpis.criticosTotal}
                 color={COLOR_ROSE}
@@ -993,7 +1002,7 @@ export default function App() {
               <BigFractionCard
                 t={t}
                 title="Itens Não Críticos em Falta"
-                tooltip="Peças de uso comum (não essenciais) que estão abaixo do estoque mínimo, do total de peças não críticas cadastradas."
+                tooltip="Produtos de uso comum (não essenciais) com falta em pelo menos uma praça, do total de produtos não críticos do catálogo. Cada produto conta uma vez, mesmo se faltar em mais de uma praça."
                 falta={kpis.naoCriticosFalta}
                 total={kpis.naoCriticosTotal}
                 color={COLOR_AMBER}
