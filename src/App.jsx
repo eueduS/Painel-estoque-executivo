@@ -572,18 +572,25 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const kpis = useMemo(() => {
-    const criticos = estoqueRows.filter((d) => d.critico);
-    const naoCriticos = estoqueRows.filter((d) => !d.critico);
-    return {
-      criticosFalta: criticos.filter((d) => d.falta < 0).length,
-      criticosTotal: criticos.length,
-      naoCriticosFalta: naoCriticos.filter((d) => d.falta < 0).length,
-      naoCriticosTotal: naoCriticos.length,
-      totalComprar: estoqueRows.reduce((s, d) => s + d.comprar, 0),
-      totalCadastrado: new Set(estoqueRows.map((d) => d.item)).size,
-    };
-  }, [estoqueRows]);
+  const kpis = useMemo(() =>{
+  const criticoByItem = new Map();
+  const faltaByItem = new Map();
+  estoqueRows.forEach((d) => {
+    criticoByItem.set(d.item, criticoByItem.get(d.item) || d.critico);
+    if (d.falta < 0) faltaByItem.set(d.item, true);
+  });
+  const itemNames = [...criticoByItem.keys()];
+  const criticosItems = itemNames.filter((n) => criticoByItem.get(n));
+  const naoCriticosItems = itemNames.filter((n) => !criticoByItem.get(n));
+  return {
+    criticosTotal: criticosItems.length,
+    criticosFalta: criticosItems.filter((n) => faltaByItem.has(n)).length,
+    naoCriticosTotal: naoCriticosItems.length,
+    naoCriticosFalta: naoCriticosItems.filter((n) => faltaByItem.has(n)).length,
+    totalComprar: estoqueRows.reduce((s, d) => s + d.comprar, 0),
+    totalCadastrado: itemNames.length,
+  };
+}, [estoqueRows]);
 
   const saudeByPraca = useMemo(
     () =>
