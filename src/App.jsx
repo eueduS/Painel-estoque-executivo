@@ -37,8 +37,8 @@ import {
    LIVE SOURCE CONFIG — Google Sheets via gviz (JSONP, no backend needed)
    ========================================================================= */
 const SHEET_ID = "1oe6_aCLLFaGZFW351kiBur5Y79KCvv9Rt40_frl6CXI";
-const GID_ESTOQUE = "1020351573";
-const GID_MOV = "1020503030";
+const GID_ESTOQUE = "921689702";
+const GID_MOV = "1296693011";
 const REFRESH_MS = 60000;
 
 let gvizCounter = 0;
