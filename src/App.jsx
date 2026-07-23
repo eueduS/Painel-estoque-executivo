@@ -601,6 +601,23 @@ export default function App() {
     };
   }, [estoqueRows]);
 
+  const impactoOperacional = useMemo(() => {
+    // "Parado" = item essencial com estoque zerado de verdade (atual === 0),
+    // não apenas abaixo do mínimo. atual === null significa "não contado" e
+    // não deve contar como parado.
+    const parados = estoqueRows.filter((d) => d.critico && d.atual === 0);
+    const porPraca = new Map();
+    parados.forEach((d) => porPraca.set(d.praca, (porPraca.get(d.praca) || 0) + 1));
+    const pracasParadas = [...porPraca.entries()]
+      .map(([praca, count]) => ({ praca, count }))
+      .sort((a, b) => b.count - a.count);
+    return {
+      itensParados: parados.length,
+      pracasParadas,
+      totalPracas: new Set(estoqueRows.map((d) => d.praca)).size,
+    };
+  }, [estoqueRows]);
+
   const saudeByPraca = useMemo(
     () =>
       PRACAS.map((p) => {
@@ -985,6 +1002,40 @@ export default function App() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
               <KpiCard t={t} icon={<Package size={16} />} label="Total de Itens Cadastrados" value={kpis.totalCadastrado} note="Produtos únicos do catálogo, sem duplicar por praça." />
               <KpiCard t={t} icon={<MapPin size={16} />} label="Praças Ativas" value="5 Praças" note={PRACAS.join(", ")} />
+              <KpiCard
+                t={t}
+                icon={<AlertTriangle size={16} />}
+                label="Itens Causando Parada"
+                value={<span className="text-rose-500">{impactoOperacional.itensParados}</span>}
+                note='Itens essenciais com estoque zerado (não é só "abaixo do mínimo" — é zero mesmo).'
+              />
+              <KpiCard
+                t={t}
+                icon={<MapPin size={16} />}
+                label="Praças com Item Parado"
+                value={
+                  <>
+                    <span className="text-amber-500">{impactoOperacional.pracasParadas.length}</span>
+                    <span className={`text-lg font-normal ${t.textFaint}`}> / {impactoOperacional.totalPracas}</span>
+                  </>
+                }
+                note={
+                  <>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {impactoOperacional.pracasParadas.map((p) => (
+                        <span
+                          key={p.praca}
+                          className={`inline-flex items-center gap-1.5 text-xs border ${t.border} rounded-md px-2.5 py-1`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                          {p.praca} · {p.count} parado{p.count > 1 ? "s" : ""}
+                        </span>
+                      ))}
+                    </div>
+                    As demais praças estão em Reserva (abaixo do mínimo, mas ainda operando com o que sobrou).
+                  </>
+                }
+              />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
