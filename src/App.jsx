@@ -605,14 +605,16 @@ export default function App() {
     // "Parado" = item essencial com estoque zerado de verdade (atual === 0),
     // não apenas abaixo do mínimo. atual === null significa "não contado" e
     // não deve contar como parado.
-    const parados = estoqueRows.filter((d) => d.critico && d.atual === 0);
+    // Contagem por produto único (mesma convenção do resto do Resumo) —
+    // um produto zerado em 2 praças conta uma vez aqui, não duas.
+    const paradosRows = estoqueRows.filter((d) => d.critico && d.atual === 0);
     const porPraca = new Map();
-    parados.forEach((d) => porPraca.set(d.praca, (porPraca.get(d.praca) || 0) + 1));
+    paradosRows.forEach((d) => porPraca.set(d.praca, (porPraca.get(d.praca) || 0) + 1));
     const pracasParadas = [...porPraca.entries()]
       .map(([praca, count]) => ({ praca, count }))
       .sort((a, b) => b.count - a.count);
     return {
-      itensParados: parados.length,
+      itensParados: new Set(paradosRows.map((d) => d.item)).size,
       pracasParadas,
       totalPracas: new Set(estoqueRows.map((d) => d.praca)).size,
     };
