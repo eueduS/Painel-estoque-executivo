@@ -222,24 +222,6 @@ const IMPACTOS_SEMANAIS_POR_PRACA = {
   BRASILIA: 12773107,
 };
 
-// Contagem de estações com Status = "Operante", extraída da planilha
-// "DISPONIBILIDADE_MUBS_OOH_GERAL - por praça (2026) OPEC" em 30/07/2026
-// (abas RIO, FOR, REC, FLN, BSB — uma linha por estação física).
-const ESTACOES_OPERANTES_POR_PRACA = {
-  RIO: 183,
-  FORTALEZA: 52,
-  RECIFE: 91,
-  "FLORIANÓPOLIS": 61,
-  BRASILIA: 92,
-};
-
-// Impacto médio por estação operante = audiência semanal total da praça ÷ nº de
-// estações operantes. Usado na Severidade por Praça pra pesar a prioridade dos itens
-// em falta pelo "tamanho" médio de cada estação daquela praça.
-const IMPACTO_MEDIO_POR_ESTACAO_POR_PRACA = Object.fromEntries(
-  PRACAS.map((p) => [p, IMPACTOS_SEMANAIS_POR_PRACA[p] / ESTACOES_OPERANTES_POR_PRACA[p]])
-);
-
 /* =========================================================================
    THEME
    ========================================================================= */
@@ -714,17 +696,13 @@ export default function App() {
   const impactoScoreMax = Math.max(...impactoPorPraca.map((r) => r.score), 1);
 
   const severidadePorPraca = useMemo(() => {
-    // Severidade = prioridade média (0–10, direto da planilha) dos itens em falta na
-    // praça — a mesma leitura dos blocos de prioridade, sem distorção. O impacto médio
-    // por estação (audiência semanal ÷ estações operantes) aparece só como contexto na
-    // tabela de detalhamento abaixo — ele NÃO entra na nota nem muda a ordem do ranking,
-    // porque misturar os dois fazia praças com prioridade mais baixa (ex.: Recife)
-    // ultrapassarem praças mais urgentes (ex.: Brasília) só por terem estações de maior
-    // audiência, o que não batia com o que os blocos de prioridade mostram.
+    // Severidade = prioridade média (0–10, já vem pronta da planilha) dos itens em
+    // falta na praça. Diferente do Indicador de Impacto, aqui não entra audiência —
+    // é só o quão urgente é repor o que já está faltando. Praça sem itens em falta = 0.
     const rows = PRACAS.map((p) => {
       const itensFalta = estoqueRows.filter((d) => d.praca === p && d.falta < 0);
-      const prioridadeMedia = itensFalta.length > 0 ? itensFalta.reduce((s, d) => s + d.prioridade, 0) / itensFalta.length : 0;
-      return { praca: p, prioridadeMedia, severidade: prioridadeMedia, itensEmFalta: itensFalta.length };
+      const severidade = itensFalta.length > 0 ? itensFalta.reduce((s, d) => s + d.prioridade, 0) / itensFalta.length : 0;
+      return { praca: p, severidade };
     });
     return rows.sort((a, b) => b.severidade - a.severidade);
   }, [estoqueRows]);
@@ -930,19 +908,13 @@ export default function App() {
     });
     r++;
 
-    headerRow(wsResumo, r, ["Praça", "Itens em Falta", "Unidades a Comprar", "Severidade (Prioridade Média 0-10)", "Impacto/Estação (contexto)"]);
-    wsResumo.getColumn(4).width = 22;
-    wsResumo.getColumn(5).width = 20;
+    headerRow(wsResumo, r, ["Praça", "Itens em Falta", "Unidades a Comprar", "Severidade (0-10)"]);
+    wsResumo.getColumn(4).width = 18;
     r++;
     PRACAS.forEach((p, i) => {
       const qtd = comprasPorPraca.find((c) => c.praca === p)?.qtd || 0;
-      const sev = severidadePorPraca.find((s) => s.praca === p);
-      const row = dataRow(
-        wsResumo,
-        r,
-        [p, faltantesPorPraca[p] || 0, qtd, Number((sev?.severidade || 0).toFixed(2)), Math.round(IMPACTO_MEDIO_POR_ESTACAO_POR_PRACA[p])],
-        { zebra: i % 2 === 1, rightAlignFrom: 1 }
-      );
+      const severidade = severidadePorPraca.find((s) => s.praca === p)?.severidade || 0;
+      const row = dataRow(wsResumo, r, [p, faltantesPorPraca[p] || 0, qtd, Number(severidade.toFixed(2))], { zebra: i % 2 === 1, rightAlignFrom: 1 });
       row.getCell(1).font = { bold: true, color: { argb: PRACA_COLORS[p].replace("#", "FF") } };
       r++;
     });
@@ -1175,10 +1147,10 @@ export default function App() {
             <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
               <div className="flex items-center gap-1.5 mb-1">
                 <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Severidade por Praça</h2>
-                <Tooltip text="Prioridade média (0 a 10) dos itens em falta em cada praça, direto da planilha — a mesma leitura da prioridade que aparece nos itens. O impacto médio por estação vem só como contexto na tabela abaixo; não entra na nota." />
+                <Tooltip text="Prioridade média (0 a 10) dos itens em falta em cada praça, direto da planilha. Diferente do Indicador de Impacto: aqui não entra audiência, só o quão urgente é repor o que já está faltando." />
               </div>
               <p className={`text-xs mb-4 ${t.textFaint}`}>Prioridade média dos itens em falta (escala 0 a 10)</p>
-              <div className="space-y-3 mb-5">
+              <div className="space-y-3">
                 {severidadePorPraca.map((row, i) => (
                   <ImpactoRow
                     key={row.praca}
@@ -1193,40 +1165,6 @@ export default function App() {
                   />
                 ))}
               </div>
-
-              <p className={`text-[11px] font-semibold uppercase tracking-wide mb-2 ${t.textFaint}`}>Como cada praça chegou nesse número</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className={`text-left border-b ${t.border}`}>
-                      <th className={`py-2 pr-3 font-semibold uppercase tracking-wide ${t.textFaint}`}>Praça</th>
-                      <th className={`py-2 pr-3 font-semibold uppercase tracking-wide ${t.textFaint} text-right`}>Itens em falta</th>
-                      <th className={`py-2 pr-3 font-semibold uppercase tracking-wide ${t.textFaint} text-right`}>Severidade (prioridade média)</th>
-                      <th className={`py-2 font-semibold uppercase tracking-wide ${t.textFaint} text-right`}>
-                        <span className="inline-flex items-center gap-1 justify-end">
-                          Impacto/estação
-                          <Tooltip text="Audiência semanal média de uma estação operante da praça. Só contexto — não altera a severidade." />
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${t.border}`}>
-                    {severidadePorPraca.map((row) => (
-                      <tr key={row.praca}>
-                        <td className="py-2 pr-3 font-semibold" style={{ color: PRACA_COLORS[row.praca] }}>
-                          {row.praca}
-                        </td>
-                        <td className={`py-2 pr-3 text-right font-mono ${t.textDim}`}>{row.itensEmFalta}</td>
-                        <td className="py-2 pr-3 text-right font-mono font-semibold text-orange-500">{row.severidade.toFixed(2)}</td>
-                        <td className={`py-2 text-right font-mono ${t.textFaint}`}>{Math.round(IMPACTO_MEDIO_POR_ESTACAO_POR_PRACA[row.praca]).toLocaleString("pt-BR")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className={`text-[11px] mt-3 ${t.textFaint}`}>
-                Impacto/estação = audiência semanal da praça ÷ estações operantes, extraído da planilha "DISPONIBILIDADE MUBS OOH GERAL" — exibido como referência, não afeta o cálculo da severidade.
-              </p>
             </div>
 
             <p className={`text-xs text-center mt-4 ${t.textFaint}`}>
