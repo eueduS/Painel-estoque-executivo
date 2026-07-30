@@ -279,7 +279,7 @@ function ProgressRing({ pct, color, trackColor, size = 72, strokeWidth = 7 }) {
   );
 }
 
-function BigFractionCard({ title, tooltip, falta, total, color, colorClass, active, onClick, t, pctNote }) {
+function BigFractionCard({ title, tooltip, falta, total, color, colorClass, active, onClick, t }) {
   const pct = total > 0 ? Math.round((falta / total) * 100) : 0;
   return (
     <button
@@ -298,7 +298,7 @@ function BigFractionCard({ title, tooltip, falta, total, color, colorClass, acti
           <span className="text-5xl sm:text-6xl">{falta}</span>
           <span className={`text-2xl sm:text-3xl ${t.textFaint}`}> / {total}</span>
         </div>
-        <p className={`text-xs mt-3 ${t.textFaint}`}>{pctNote(pct)}</p>
+        <p className={`text-xs mt-3 ${t.textFaint}`}>{pct}% dos itens {title.toLowerCase()} precisam de atenção imediata</p>
         <span className={`inline-block mt-2 text-[10px] font-semibold uppercase tracking-wide ${active ? "" : "opacity-0"}`} style={{ color }}>
           Filtro ativo na tabela ↓
         </span>
@@ -998,7 +998,6 @@ export default function App() {
                 colorClass="text-rose-500"
                 active={criticoFilter === true && somenteEmFalta}
                 onClick={() => toggleQuickFilter(true)}
-                pctNote={(pct) => `${pct}% dos itens críticos em falta precisam de atenção imediata`}
               />
               <BigFractionCard
                 t={t}
@@ -1010,7 +1009,6 @@ export default function App() {
                 colorClass="text-amber-500"
                 active={criticoFilter === false && somenteEmFalta}
                 onClick={() => toggleQuickFilter(false)}
-                pctNote={(pct) => `${pct}% dos itens não críticos em falta podem ser repostos no próximo ciclo, sem risco imediato de operação`}
               />
             </div>
 
