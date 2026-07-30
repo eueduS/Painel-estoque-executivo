@@ -123,24 +123,6 @@ function parseEstoqueRows(cols, rows) {
     .filter((r) => !ITENS_NAO_ESTACAO.includes(r.item));
 }
 
-// Classificação de status por item:
-// - "parado"  → item crítico com atual = 0 (zerado, risco de operação)
-// - "reserva" → abaixo do mínimo, mas ainda tem alguma unidade em estoque
-// - "ok"      → no mínimo ou acima
-// - null      → sem dado de "Atual" na planilha (não dá pra classificar)
-const STATUS_CONFIG = {
-  parado: { label: "Parado", className: "bg-rose-500/15 text-rose-400" },
-  reserva: { label: "Reserva", className: "bg-amber-500/15 text-amber-400" },
-  ok: { label: "OK", className: "bg-emerald-500/15 text-emerald-400" },
-};
-
-function getItemStatus(d) {
-  if (d.atual === null || d.atual === undefined) return null;
-  if (d.critico && d.atual === 0) return "parado";
-  if (d.falta < 0) return "reserva";
-  return "ok";
-}
-
 /* =========================================================================
    FALLBACK DATA — usado até a 1a sincronização, ou se a planilha ficar fora
    ========================================================================= */
@@ -208,19 +190,6 @@ const PRACA_COLORS = {
 };
 const COLOR_ROSE = "#F43F5E";
 const COLOR_AMBER = "#F59E0B";
-
-// Audiência real por praça — impactos SEMANAIS (confirmado com Eduardo em 27/07/2026),
-// somando só estações Operantes na planilha "DISPONIBILIDADE MUBS OOH GERAL".
-// FORTALEZA: 30 de 52 estações tinham valor na fonte (5.944.434 real); as 22 restantes
-// foram estimadas pela média das 30 conhecidas (198.147,8/estação × 22 ≈ 4.359.252).
-// RECIFE: 90 de 91 estações operantes tinham valor (1 estação com "#N/A" na fonte, excluída).
-const IMPACTOS_SEMANAIS_POR_PRACA = {
-  RIO: 40046713,
-  FORTALEZA: 10303686,
-  RECIFE: 16812990,
-  "FLORIANÓPOLIS": 10965110,
-  BRASILIA: 12773107,
-};
 
 /* =========================================================================
    THEME
@@ -477,18 +446,6 @@ function LastUpdatedBadge({ lastUpdated, syncing, syncError, onRefresh, t }) {
   );
 }
 
-function StatusBadge({ status, t }) {
-  if (!status) {
-    return (
-      <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${t.dark ? "bg-zinc-700/50 text-slate-400" : "bg-slate-200 text-slate-500"}`}>
-        Sem dado
-      </span>
-    );
-  }
-  const cfg = STATUS_CONFIG[status];
-  return <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${cfg.className}`}>{cfg.label}</span>;
-}
-
 function PracaHealthRow({ praca, total, faltando, sharedMax, color, t }) {
   const trackPct = sharedMax > 0 ? (total / sharedMax) * 100 : 0;
   const filledPct = sharedMax > 0 ? (faltando / sharedMax) * 100 : 0;
@@ -504,30 +461,6 @@ function PracaHealthRow({ praca, total, faltando, sharedMax, color, t }) {
       <span className={`font-mono text-xs w-16 text-right shrink-0 ${t.textDim}`}>
         {faltando}/{total}
       </span>
-    </div>
-  );
-}
-
-function ImpactoRow({ praca, score, scoreMax, badge, color, t, barClass = "bg-amber-500/80", badgeLabel = "prioridade máxima" }) {
-  const pct = scoreMax > 0 ? (score / scoreMax) * 100 : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs w-24 sm:w-28 shrink-0 font-semibold tracking-wide" style={{ color }}>
-        {praca}
-      </span>
-      <div className="flex-1 relative h-6">
-        <div className={`absolute inset-y-0 left-0 rounded-md ${t.track}`} style={{ width: "100%" }} />
-        <div className={`absolute inset-y-0 left-0 rounded-md ${barClass} transition-all duration-500`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className={`font-mono text-xs w-14 text-right shrink-0 ${t.textDim}`}>{score.toFixed(2)}</span>
-      {badge && (
-        <span
-          className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md shrink-0"
-          style={{ color: COLOR_ROSE, backgroundColor: `${COLOR_ROSE}1A` }}
-        >
-          {badgeLabel}
-        </span>
-      )}
     </div>
   );
 }
@@ -678,34 +611,6 @@ export default function App() {
     [estoqueRows]
   );
   const maxItensPraca = Math.max(...saudeByPraca.map((x) => x.total), 1);
-
-  const impactoPorPraca = useMemo(() => {
-    // Score = (% de itens em falta na praça) × (índice de audiência 0–10, normalizado
-    // pelo maior valor de IMPACTOS_SEMANAIS_POR_PRACA). Uma praça com pouca falta mas
-    // audiência muito maior que as demais ainda pode aparecer perto do topo — é o
-    // comportamento esperado, não um bug.
-    const valores = Object.values(IMPACTOS_SEMANAIS_POR_PRACA);
-    const maxImpacto = Math.max(...valores, 1);
-    const rows = saudeByPraca.map((s) => {
-      const pctFaltando = s.total > 0 ? s.faltando / s.total : 0;
-      const audienciaIndex = ((IMPACTOS_SEMANAIS_POR_PRACA[s.praca] || 0) / maxImpacto) * 10;
-      return { praca: s.praca, score: pctFaltando * audienciaIndex };
-    });
-    return rows.sort((a, b) => b.score - a.score);
-  }, [saudeByPraca]);
-  const impactoScoreMax = Math.max(...impactoPorPraca.map((r) => r.score), 1);
-
-  const severidadePorPraca = useMemo(() => {
-    // Severidade = prioridade média (0–10, já vem pronta da planilha) dos itens em
-    // falta na praça. Diferente do Indicador de Impacto, aqui não entra audiência —
-    // é só o quão urgente é repor o que já está faltando. Praça sem itens em falta = 0.
-    const rows = PRACAS.map((p) => {
-      const itensFalta = estoqueRows.filter((d) => d.praca === p && d.falta < 0);
-      const severidade = itensFalta.length > 0 ? itensFalta.reduce((s, d) => s + d.prioridade, 0) / itensFalta.length : 0;
-      return { praca: p, severidade };
-    });
-    return rows.sort((a, b) => b.severidade - a.severidade);
-  }, [estoqueRows]);
 
   const faltantesPorPracaCriticidade = useMemo(
     () =>
@@ -908,32 +813,26 @@ export default function App() {
     });
     r++;
 
-    headerRow(wsResumo, r, ["Praça", "Itens em Falta", "Unidades a Comprar", "Severidade (0-10)"]);
-    wsResumo.getColumn(4).width = 18;
+    headerRow(wsResumo, r, ["Praça", "Itens em Falta", "Unidades a Comprar"]);
     r++;
     PRACAS.forEach((p, i) => {
       const qtd = comprasPorPraca.find((c) => c.praca === p)?.qtd || 0;
-      const severidade = severidadePorPraca.find((s) => s.praca === p)?.severidade || 0;
-      const row = dataRow(wsResumo, r, [p, faltantesPorPraca[p] || 0, qtd, Number(severidade.toFixed(2))], { zebra: i % 2 === 1, rightAlignFrom: 1 });
+      const row = dataRow(wsResumo, r, [p, faltantesPorPraca[p] || 0, qtd], { zebra: i % 2 === 1, rightAlignFrom: 1 });
       row.getCell(1).font = { bold: true, color: { argb: PRACA_COLORS[p].replace("#", "FF") } };
       r++;
     });
 
     // ---------------- Estoque Completo ----------------
     const wsEstoque = wb.addWorksheet("Estoque Completo");
-    wsEstoque.columns = [{ width: 15 }, { width: 26 }, { width: 10 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 10 }];
-    headerRow(wsEstoque, 1, ["Praça", "Item", "Crítico", "Status", "Mínimo", "Atual", "Falta/Excedente", "Comprar"]);
+    wsEstoque.columns = [{ width: 15 }, { width: 26 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 10 }];
+    headerRow(wsEstoque, 1, ["Praça", "Item", "Crítico", "Mínimo", "Atual", "Falta/Excedente", "Comprar"]);
     wsEstoque.views = [{ state: "frozen", ySplit: 1 }];
     estoqueRows.forEach((d, i) => {
-      const status = getItemStatus(d);
-      const statusLabel = status ? STATUS_CONFIG[status].label : "Sem dado";
-      const row = dataRow(wsEstoque, i + 2, [d.praca, d.item, d.critico ? "Sim" : "Não", statusLabel, d.min, d.atual, d.falta, d.comprar], { zebra: i % 2 === 1, rightAlignFrom: 4 });
-      if (status === "parado") row.getCell(4).font = { color: { argb: ROSE }, bold: true };
-      if (status === "reserva") row.getCell(4).font = { color: { argb: AMBER }, bold: true };
-      if (d.falta < 0) row.getCell(7).font = { color: { argb: ROSE }, bold: true };
-      if (d.comprar > 0) row.getCell(8).font = { bold: true };
+      const row = dataRow(wsEstoque, i + 2, [d.praca, d.item, d.critico ? "Sim" : "Não", d.min, d.atual, d.falta, d.comprar], { zebra: i % 2 === 1, rightAlignFrom: 3 });
+      if (d.falta < 0) row.getCell(6).font = { color: { argb: ROSE }, bold: true };
+      if (d.comprar > 0) row.getCell(7).font = { bold: true };
     });
-    wsEstoque.autoFilter = { from: "A1", to: "H1" };
+    wsEstoque.autoFilter = { from: "A1", to: "G1" };
     wsEstoque.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
     // ---------------- Compra por praça ----------------
@@ -1124,45 +1023,6 @@ export default function App() {
               <div className="space-y-3">
                 {saudeByPraca.map((row) => (
                   <PracaHealthRow key={row.praca} praca={row.praca} total={row.total} faltando={row.faltando} sharedMax={maxItensPraca} color={PRACA_COLORS[row.praca]} t={t} />
-                ))}
-              </div>
-            </div>
-
-            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Indicador de Impacto por Praça</h2>
-                <Tooltip text="Cruza o % de itens em falta na praça com o índice de audiência real dela (impactos semanais das estações operantes, normalizado de 0 a 10). Uma praça com pouca falta mas audiência muito maior que as demais pode aparecer perto do topo — é intencional." />
-              </div>
-              <p className={`text-xs mb-4 ${t.textFaint}`}>% de itens em falta × índice de audiência semanal</p>
-              <div className="space-y-3">
-                {impactoPorPraca.map((row, i) => (
-                  <ImpactoRow key={row.praca} praca={row.praca} score={row.score} scoreMax={impactoScoreMax} badge={i === 0} color={PRACA_COLORS[row.praca]} t={t} />
-                ))}
-              </div>
-              <p className={`text-[11px] mt-3 ${t.textFaint}`}>
-                Audiência em impactos semanais, estações operantes. Fortaleza tem parte do valor estimado (22 de 52 estações sem dado na fonte).
-              </p>
-            </div>
-
-            <div className={`rounded-2xl border ${t.border} ${t.bgAlt} p-5`}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <h2 className="font-display text-sm font-semibold uppercase tracking-wide">Severidade por Praça</h2>
-                <Tooltip text="Prioridade média (0 a 10) dos itens em falta em cada praça, direto da planilha. Diferente do Indicador de Impacto: aqui não entra audiência, só o quão urgente é repor o que já está faltando." />
-              </div>
-              <p className={`text-xs mb-4 ${t.textFaint}`}>Prioridade média dos itens em falta (escala 0 a 10)</p>
-              <div className="space-y-3">
-                {severidadePorPraca.map((row, i) => (
-                  <ImpactoRow
-                    key={row.praca}
-                    praca={row.praca}
-                    score={row.severidade}
-                    scoreMax={10}
-                    badge={i === 0 && row.severidade > 0}
-                    color={PRACA_COLORS[row.praca]}
-                    t={t}
-                    barClass="bg-orange-500/80"
-                    badgeLabel="praça mais severa"
-                  />
                 ))}
               </div>
             </div>
@@ -1369,12 +1229,6 @@ export default function App() {
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Praça</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Item</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Crítico</th>
-                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>
-                        <span className="inline-flex items-center gap-1">
-                          Status
-                          <Tooltip text="Parado: item crítico com estoque zerado. Reserva: abaixo do mínimo, mas ainda com alguma unidade." />
-                        </span>
-                      </th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Mínimo</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Atual</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Falta</th>
@@ -1397,9 +1251,6 @@ export default function App() {
                             {d.critico ? "Sim" : "Não"}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5">
-                          <StatusBadge status={getItemStatus(d)} t={t} />
-                        </td>
                         <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.min}</td>
                         <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.atual === null ? "—" : d.atual}</td>
                         <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-500">{d.falta}</td>
@@ -1408,7 +1259,7 @@ export default function App() {
                     ))}
                     {pagedRowsFalt.length === 0 && (
                       <tr>
-                        <td colSpan="8" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
+                        <td colSpan="7" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
                           Nenhum item em falta com esses filtros. 🎉
                         </td>
                       </tr>
@@ -1538,12 +1389,6 @@ export default function App() {
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Praça</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Item</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>Crítico</th>
-                      <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim}`}>
-                        <span className="inline-flex items-center gap-1">
-                          Status
-                          <Tooltip text="Parado: item crítico com estoque zerado. Reserva: abaixo do mínimo, mas ainda com alguma unidade. OK: no mínimo ou acima." />
-                        </span>
-                      </th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Mínimo</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Atual</th>
                       <th className={`px-4 py-3 font-semibold text-xs uppercase tracking-wide ${t.textDim} text-right`}>Falta/Exced.</th>
@@ -1566,9 +1411,6 @@ export default function App() {
                             {d.critico ? "Sim" : "Não"}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5">
-                          <StatusBadge status={getItemStatus(d)} t={t} />
-                        </td>
                         <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.min}</td>
                         <td className={`px-4 py-2.5 text-right font-mono ${t.textDim}`}>{d.atual === null ? "—" : d.atual}</td>
                         <td className={`px-4 py-2.5 text-right font-mono font-semibold ${d.falta < 0 ? "text-rose-500" : "text-emerald-500"}`}>
@@ -1579,7 +1421,7 @@ export default function App() {
                     ))}
                     {pagedRows.length === 0 && (
                       <tr>
-                        <td colSpan="8" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
+                        <td colSpan="7" className={`px-4 py-10 text-center text-sm ${t.textFaint}`}>
                           Nenhum item corresponde à busca ou filtro selecionado.
                         </td>
                       </tr>
